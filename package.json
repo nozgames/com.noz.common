@@ -1,0 +1,19 @@
+{
+  "name": "com.noz.common",
+  "version": "0.0.1",
+  "displayName": "NoZ Common",
+  "description": "Common files for all NoZ packages",
+  "unity": "2019.1",
+  "unityRelease": "0b5",
+  "keywords": [
+    "keyword1",
+    "keyword2",
+    "keyword3"
+  ],
+  "author": {
+    "name": "NoZ Games, LLC",
+    "email": "info@nozgames.com",
+    "url": "https://www.nozgames.com"
+  },
+  "type": "tool"
+}
