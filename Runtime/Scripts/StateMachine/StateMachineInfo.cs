@@ -97,11 +97,12 @@ namespace NoZ
             if (methodInfo == null)
                 return null;
 
-            var transitionInfo = new StateTransitionInfo();
-            transitionInfo.From = from;
-            transitionInfo.To = to;
-            transitionInfo.InvokeDelegate = (OpenDelegate)OpenDelegate.Create(methodInfo);
-            return transitionInfo;
+            return new StateTransitionInfo
+            {
+                From = from, 
+                To = to, 
+                InvokeDelegate = OpenDelegate.Create(methodInfo)
+            };
         }
 
         /// <summary>
@@ -146,9 +147,9 @@ namespace NoZ
                 {
                     var parameters = stateMethod.GetParameters();
                     if (parameters.Length == 0)
-                        stateToInfo.InvokeDelegate = (OpenDelegate)OpenDelegate.Create(stateMethod as MethodInfo);
+                        stateToInfo.InvokeDelegate = OpenDelegate.Create(stateMethod);
                     else if (parameters.Length == 1 && parameters[0].ParameterType == typeof(float))
-                        stateToInfo.InvokeWithTimeDelegate = (OpenDelegate<float>)OpenDelegate.Create(stateMethod as MethodInfo);
+                        stateToInfo.InvokeWithTimeDelegate = OpenDelegate<float>.Create(stateMethod);
                     else
                         throw new UnityException($"method for state '{stateToInfo.Name}' does not match a valid state signature");
                 }
