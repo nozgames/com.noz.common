@@ -781,17 +781,19 @@ namespace NoZ
             // Resolve target
             if (!string.IsNullOrWhiteSpace(_targetName))
             {
-                _gameObject = gameObject.transform.Find(_targetName)?.gameObject;
-                if (_gameObject == null)
+                var targetTransform = gameObject.transform.Find(_targetName);
+                if (targetTransform == null)
                 {
                     Debug.Log($"warning: missing target '{_targetName}'");
                     FreeTween(this);
                     return false;
                 }
+
+                _gameObject = targetTransform.gameObject;
             }
             else
             {
-                _gameObject = _gameObject ?? gameObject;
+                _gameObject = _gameObject == null ? gameObject : _gameObject;
                 _target = _gameObject;
             }
 
