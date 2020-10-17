@@ -125,7 +125,8 @@ namespace NoZ
                 OnCallbackRegistered(handler.eventType);
             }
         }
-        
+
+       
         internal void RegisterHandler(ActorEventHandler handler)
         {
             if (handlers == null)
@@ -183,6 +184,9 @@ namespace NoZ
 
         internal void UnregisterHandler(ActorEventHandler handler)
         {
+            if (handlers == null)
+                return;
+
             for(int handlerIndex=handlers.Count-1; handlerIndex >= 0; handlerIndex--)
                 if (handlers[handlerIndex].component == handler.component && handlers[handlerIndex].eventType == handler.eventType)
                 {

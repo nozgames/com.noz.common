@@ -9,6 +9,8 @@
             this.deltaTime = deltaTime;
             return this;
         }
+
+        public override string ToString() => $"{GetType()}: {deltaTime}s";
     }
 
     public class ActorFixedUpdateEvent : ActorEvent
@@ -20,5 +22,7 @@
             this.deltaTime = deltaTime;
             return this;
         }
+
+        public override string ToString() => $"{GetType()}: {deltaTime}s";
     }    
 }

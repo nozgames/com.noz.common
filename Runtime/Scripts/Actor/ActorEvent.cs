@@ -1,8 +1,38 @@
 ﻿using System;
 using System.Reflection;
+using UnityEngine;
 
 namespace NoZ
 {
+    [Serializable]
+    public struct ActorEventType
+    {
+        [SerializeField] private string name;
+
+        private Type type;
+
+        public Type Type {
+            get {
+                if(null == type && name != null)
+                    type = Type.GetType(name);
+
+                return type;
+            }
+        }
+
+        public static ActorEventType FromEvent(ActorEvent evt) => new ActorEventType { name = evt.GetType().FullName };
+
+        public static ActorEventType FromType(Type evt)
+        {
+            if (!typeof(ActorEvent).IsAssignableFrom(evt))
+                throw new ArgumentException("Type is not an ActorEvent");
+
+            return new ActorEventType { name = evt.GetType().FullName };
+        }
+
+        public static ActorEventType FromType<T>() where T : ActorEvent => FromType(typeof(T));
+    }
+
     public class ActorEvent
     {
         private static class SingletonWrapper<T> where T : ActorEvent, new()
@@ -53,6 +83,12 @@ namespace NoZ
         {
             _invoke = (InvokeDelegate)Delegate.CreateDelegate(typeof(InvokeDelegate), methodInfo);
         }
+
+        public ActorEventDelegateImpl(Action<ActorEvent> action)
+        {
+            _invoke = (InvokeDelegate)Delegate.CreateDelegate(typeof(InvokeDelegate), action.Method);
+        }
+
         public override void Invoke (object target, ActorEvent evt) => _invoke((TTarget)target, (TEvent)evt);
     }
     

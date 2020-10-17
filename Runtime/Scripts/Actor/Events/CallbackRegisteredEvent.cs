@@ -14,5 +14,7 @@ namespace NoZ
             eventType = _eventType;
             return this;
         }
+
+        public override string ToString() => $"{GetType()}: {eventType}";
     }
 }

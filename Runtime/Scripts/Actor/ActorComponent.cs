@@ -66,6 +66,33 @@ namespace NoZ
             return false;
         }
 
+        protected void RegisterHandler(Type eventType, Action<ActorEvent> callback, int priority = 0)
+        {
+            if (!typeof(ActorEvent).IsAssignableFrom(eventType))
+                throw new ArgumentException("type is not an ActorEvent");
+
+            actor.RegisterHandler(new ActorEventHandler
+            {
+                autoRegister = false,
+                callback = ActorEventDelegate.Create(callback.Method),
+                component= this,
+                eventType = eventType,
+                priority = priority
+            });
+        }
+
+        protected void UnregisterHandler (Type eventType, Action<ActorEvent> callback)
+        {
+            actor.UnregisterHandler(new ActorEventHandler
+            {
+                autoRegister = false,
+                callback = ActorEventDelegate.Create(callback.Method),
+                component = this,
+                eventType = eventType,
+                priority = 0
+            });
+        }
+
         protected void RegisterHandler<T>() where T : ActorEvent
         {
             // Find a handler for the event
@@ -177,10 +204,6 @@ namespace NoZ
             
             foreach(var dependency in info.injection)
                 dependency.field.SetValue(this, GetActorComponent(dependency.componentType));
-
-            // Send out a callback registered event for each callback that was registered
-            foreach(var handler in info.handlers)
-                actor.Send(ActorEvent.Singleton<CallbackRegisteredEvent>().Init(handler.eventType));
         }
 
         protected virtual void OnDisable()
