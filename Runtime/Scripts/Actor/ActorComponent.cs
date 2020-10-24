@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace NoZ
 {
-    public class ActorComponentInfo
+    internal class ActorComponentInfo
     {
         public struct Dependency
         {
@@ -39,7 +39,7 @@ namespace NoZ
         /// </summary>
         public Actor actor { get; private set; }
 
-        public ActorComponentInfo info { get; private set; }
+        internal ActorComponentInfo info { get; private set; }
 
         public bool HandlesEvent(Type eventType)
         {
@@ -50,9 +50,9 @@ namespace NoZ
             return false;
         }
 
-        public bool TryGetHandler<T>(out ActorEventHandler result) => TryGetHandler(typeof(T), out result);
+        internal bool TryGetHandler<T>(out ActorEventHandler result) => TryGetHandler(typeof(T), out result);
 
-        public bool TryGetHandler(Type eventType, out ActorEventHandler result)
+        internal bool TryGetHandler(Type eventType, out ActorEventHandler result)
         {
             foreach(var handler in info.handlers)
                 if (handler.eventType == eventType)

@@ -55,7 +55,7 @@ namespace NoZ
     }
     
       
-    public abstract class ActorEventDelegate
+    internal abstract class ActorEventDelegate
     {
         public abstract void Invoke (object target, ActorEvent evt);
         
@@ -71,7 +71,7 @@ namespace NoZ
         }        
     }
 
-    public class ActorEventDelegateImpl<TTarget,TEvent> : ActorEventDelegate
+    internal class ActorEventDelegateImpl<TTarget,TEvent> : ActorEventDelegate
         where TTarget : class
         where TEvent : ActorEvent
     {
@@ -92,7 +92,7 @@ namespace NoZ
         public override void Invoke (object target, ActorEvent evt) => _invoke((TTarget)target, (TEvent)evt);
     }
     
-    public struct ActorEventHandler
+    internal struct ActorEventHandler
     {
         public ActorComponent component;
         public ActorEventDelegate callback;
@@ -102,7 +102,7 @@ namespace NoZ
     }
     
     [AttributeUsage(AttributeTargets.Method)]
-    internal class ActorEventHandlerAttribute : Attribute
+    public class ActorEventHandlerAttribute : Attribute
     {
         public int priority = 0;
         public bool autoRegister = true;

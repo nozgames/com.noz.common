@@ -27,6 +27,8 @@ namespace NoZ.Rift
                 yield return new WaitForSeconds(interval);
                 if(null != target)
                     target.SetActive(true);
+                
+                break;
             }
         }
     }
