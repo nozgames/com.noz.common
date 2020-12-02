@@ -285,12 +285,12 @@ namespace NoZ
         /// Returns true if there are callbacks registered that require the fixed update coroutine
         /// </summary>
         private bool IsFixedUpdateCallbackRegistered => (flags & Flags.SendFixedUpdateEvent) != 0;
-        
+
         /// <summary>
         /// Called when a callback is registered
         /// </summary>
         /// <param name="eventType">type of event being registered</param>
-        private void OnCallbackRegistered(Type eventType)
+        protected virtual void OnCallbackRegistered(Type eventType)
         {
             if (eventType == typeof(ActorUpdateEvent))
                 flags |= Flags.SendUpdateEvent;
@@ -312,7 +312,7 @@ namespace NoZ
         /// Called when a callback for a given event type is unregistered
         /// </summary>
         /// <param name="eventType">type of event being unregistered</param>
-        private void OnCallbackUnregistered(Type eventType)
+        protected virtual void OnCallbackUnregistered(Type eventType)
         {
             if (eventType == typeof(ActorUpdateEvent))
                 flags = HandlesEvent(eventType)?flags:(flags & ~Flags.SendUpdateEvent);
