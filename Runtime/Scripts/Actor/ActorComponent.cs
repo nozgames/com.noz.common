@@ -33,11 +33,20 @@ namespace NoZ
         /// Dictionary of all actor component info per type
         /// </summary>
         private static readonly Dictionary<Type, ActorComponentInfo> infoByType = new Dictionary<Type, ActorComponentInfo>();
-        
+
+        private Actor _actor;
+
         /// <summary>
         /// Actor this handler is attached to.
         /// </summary>
-        public Actor actor { get; private set; }
+        public Actor actor {
+            get {
+                if(_actor == null)
+                    _actor = GetComponentInParent<Actor>();
+
+                return _actor;
+            }
+        }
 
         internal ActorComponentInfo info { get; private set; }
 
@@ -129,10 +138,6 @@ namespace NoZ
 
         protected virtual void OnEnable()
         {
-            actor = GetComponentInParent<Actor>();
-            if (null == actor)
-                return;
-
             // Lazy create the handlers array for this handler when first enabled
             var type = GetType();
             if (!infoByType.TryGetValue(type, out var existingInfo))
