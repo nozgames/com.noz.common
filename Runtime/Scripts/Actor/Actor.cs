@@ -144,7 +144,7 @@ namespace NoZ
         private int FindHandlerInsertionPoint(int priority)
         {
             var handlerIndex = 0;
-            for (; handlerIndex < handlers.Count - 1 && handlers[handlerIndex].priority >= priority; handlerIndex++);
+            for (; handlerIndex < handlers.Count && handlers[handlerIndex].priority >= priority; handlerIndex++);
             return handlerIndex;
         }
 
