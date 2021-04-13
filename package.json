@@ -1,6 +1,6 @@
 {
   "name": "com.noz.common",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "displayName": "NoZ Common",
   "description": "Common files for all NoZ packages",
   "unity": "2019.1",
