@@ -41,7 +41,11 @@ namespace NoZ
         private Coroutine updateCoroutine = null;
 
         private Flags flags = 0;
-        
+
+        public int componentCount => components?.Count ?? 0;
+
+        public ActorComponent GetComponent(int index) => components[index];
+
         /// <summary>
         /// Return the component list back to the pool when the actor is destroy 
         /// </summary>
