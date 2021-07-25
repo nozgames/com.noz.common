@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace NoZ.UI
+namespace NoZ.Style
 {
     public class StyleSheet : ScriptableObject
     {
@@ -146,9 +146,9 @@ namespace NoZ.UI
                 if (stateName == "hover")
                     state = Style.State.Hover;
                 else if (stateName == "disabled")
-                    state = Style.State.Hover;
+                    state = Style.State.Disabled;
                 else if (stateName == "pressed")
-                    state = Style.State.Hover;
+                    state = Style.State.Pressed;
                 else if (stateName == "selected")
                     state = Style.State.Selected;
                 else if (stateName == "selected:hover")
@@ -196,8 +196,6 @@ namespace NoZ.UI
                 throw new FormatException($"{GetLineNumber(text, tokens[tokenIndex - 1])}: Missing \";\"");
 
             serializedProperties.Add(new SerializedProperty { name = name, value = value });
-
-            Debug.Log($"{selector:X016} {name} = {value}");
         }
 
         private static int GetLineNumber(string text, Match match) => GetLineNumber(text, match.Index);

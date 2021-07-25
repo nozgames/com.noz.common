@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace NoZ.UI
+namespace NoZ.Style
 {
     public class StyleAnimatorState : StateMachineBehaviour
     {

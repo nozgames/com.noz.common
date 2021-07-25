@@ -2,9 +2,8 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.EventSystems;
 
-namespace NoZ.UI
+namespace NoZ.Style
 {
     public class Style : MonoBehaviour
     {
@@ -83,6 +82,21 @@ namespace NoZ.UI
         /// </summary>
         public State state => _stateProvider != null ? _stateProvider.state : (_parent != null ? _parent.state : State.Normal);
 
+        public StyleSheet styleSheet
+        {
+            get => _styleSheet;
+            set
+            {
+                if (_styleSheet == value)
+                    return;
+
+                _styleSheet = value;
+
+                if (isLinked)
+                    UpdateActiveStyleSheet();
+            }
+        }
+
         public void Attach()
         {
             if (_stateProvider != null)
@@ -131,6 +145,11 @@ namespace NoZ.UI
 
             isLinked = true;
 
+            UpdateActiveStyleSheet();
+        }
+
+        private void UpdateActiveStyleSheet()
+        {
             // Find the active style sheet.
             _activeSheet = _styleSheet;
 
@@ -139,25 +158,30 @@ namespace NoZ.UI
                 _activeSheet = parent._activeSheet;
 
             // If we have a style sheet then propegate it to our children
-            if (_activeSheet != null)
-                PropegateStyleSheet();
+            if (_activeSheet != null && null != _children)
+                foreach (var child in _children)
+                    child.SetActiveStyleSheet(_activeSheet);
+
+            Apply();
         }
 
-        private void PropegateStyleSheet()
+        private void SetActiveStyleSheet(StyleSheet activeSheet)
         {
+            // If we have our own style sheet then stop the chain
+            if (_styleSheet != null)
+                return;
+
+            // Set the sheet from the parent and apply the chanes
+            _activeSheet = activeSheet;
+            Apply();
+
+            // If we have children we need to push the sheet up to them as well
             if (_children == null)
                 return;
 
             foreach (var child in _children)
-            {
                 if(child._styleSheet == null)
-                {
-                    child._activeSheet = _activeSheet;
-                    child.PropegateStyleSheet();
-                }
-            }
-
-            Apply();
+                    child.SetActiveStyleSheet(activeSheet);
         }
 
         private void UnlinkFromParent ()
@@ -180,6 +204,9 @@ namespace NoZ.UI
 
         private void OnEnable()
         {
+            idHash = StringToHash(string.IsNullOrEmpty(_id) ? name : _id);
+            inheritHash = StringToHash(_inherit);
+
             Attach();
             LinkToParent();
             Apply();
@@ -219,7 +246,7 @@ namespace NoZ.UI
                     child.Apply(child._stateProvider == null);
         }
 
-        public static int StringToHash(string name) => Animator.StringToHash(name.ToLower());
+        public static int StringToHash(string name) => string.IsNullOrEmpty(name) ? 0 : Animator.StringToHash(name.ToLower());
 
         private static StyleTargetInfo GetOrCreateStyleTargetInfo(Type targetType)
         {

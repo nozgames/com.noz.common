@@ -3,7 +3,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using UnityEditor.Animations;
 
-namespace NoZ.UI
+namespace NoZ.Style
 {
     public class SelectableStateProvider : StateProvider, ISelectHandler, IDeselectHandler
     {

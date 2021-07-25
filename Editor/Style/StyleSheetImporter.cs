@@ -1,8 +1,6 @@
 using System.IO;
-using System.Linq;
 using UnityEngine;
 using UnityEditor;
-using System.Collections.Generic;
 
 #if UNITY_2020_2_OR_NEWER
 using UnityEditor.AssetImporters;
@@ -10,10 +8,10 @@ using UnityEditor.AssetImporters;
 using UnityEditor.Experimental.AssetImporters;
 #endif
 
-namespace NoZ.UI
+namespace NoZ.Style
 {
     [ScriptedImporter(1, "uiss")]
-    public class UIStyleSheetImporter : ScriptedImporter
+    public class StyleSheetImporter : ScriptedImporter
     {
         private static string GetSelectedPathOrFallback()
         {

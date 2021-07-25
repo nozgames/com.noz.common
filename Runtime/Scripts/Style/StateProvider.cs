@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace NoZ.UI
+namespace NoZ.Style
 {
     /// <summary>
     /// Abstract class used to define a class that privides state to the style system

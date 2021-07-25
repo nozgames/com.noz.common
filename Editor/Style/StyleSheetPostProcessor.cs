@@ -1,11 +1,8 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
 using UnityEditor;
 
-namespace NoZ.UI
+namespace NoZ.Style
 {
-    public class UIStyleSheetPostProcessor : AssetPostprocessor
+    public class StyleSheetPostProcessor : AssetPostprocessor
     {
         static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {

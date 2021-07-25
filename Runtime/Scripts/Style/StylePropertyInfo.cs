@@ -1,6 +1,6 @@
 using System;
 
-namespace NoZ.UI
+namespace NoZ.Style
 {
     internal class StylePropertyInfo
     {
