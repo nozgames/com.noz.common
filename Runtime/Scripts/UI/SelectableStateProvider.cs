@@ -80,7 +80,10 @@ namespace NoZ.UI
             else if (hash == _triggerDisabled)
                 _animationState = Style.State.Disabled;
             else if (hash == _triggerSelected)
+            {
                 _animationState = Style.State.Selected;
+                _selected = true;
+            }
 
             UpdateState();
         }

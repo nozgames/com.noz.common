@@ -75,7 +75,7 @@ namespace NoZ.UI
             if (!_properties.TryGetValue(propertyId, out var properties))
                 return null;
 
-            return Search(properties, style.idHash, style.inheritHash, style.state);            
+            return Search(properties, style.idHash, style.inheritHash, style.state);
         }
 
         public T GetValue<T> (Style style, string propertyName, T defaultValue) => 

@@ -6,7 +6,7 @@ using UnityEngine.EventSystems;
 
 namespace NoZ.UI
 {
-    public class Style : UIBehaviour
+    public class Style : MonoBehaviour
     {
         public enum State
         {
@@ -43,14 +43,32 @@ namespace NoZ.UI
         /// </summary>
         internal static Dictionary<int, StylePropertyInfo> _propertyInfos = new Dictionary<int, StylePropertyInfo>();
 
-
-        private Style _parent = null;
+        /// <summary>
+        /// State provider for this style
+        /// </summary>
         private StateProvider _stateProvider;
+
+        /// <summary>
+        /// Parent style for all styles that do not have providers
+        /// </summary>
+        private Style _parent = null;
+
+        /// <summary>
+        /// Style targets
+        /// </summary>
+        // TODO: can we store the target info with this to prevent needing a lookup?
         private Component[] _targets;
 
-        public int idHash { get; private set; }
+        /// <summary>
+        /// Hash of the style identifier
+        /// </summary>
+        internal int idHash { get; private set; }
 
-        public int inheritHash { get; private set; }
+        /// <summary>
+        /// Hash of the inherit identifier
+        /// </summary>
+        internal int inheritHash { get; private set; }
+
 
         private StyleSheet _activeSheet = null;
 
@@ -68,10 +86,11 @@ namespace NoZ.UI
         public void Attach()
         {
             if (_stateProvider != null)
+            {
                 _stateProvider.onStateChanged -= OnStateChanged;
-
-            idHash = StringToHash(_id);
-            inheritHash = StringToHash(_inherit);
+                Destroy(_stateProvider);
+                _stateProvider = null;
+            }
 
             // Search for a provider
             foreach (var provider in _stateProviders)
@@ -92,7 +111,7 @@ namespace NoZ.UI
         private void OnStateChanged(StateProvider provider)
         {
             if (provider == _stateProvider)
-                Apply();
+                Apply(recurseChildren:true);
         }
 
         private void LinkToParent ()
@@ -100,7 +119,8 @@ namespace NoZ.UI
             if (isLinked)
                 return;
 
-            _parent = transform.parent.GetComponentInParent<Style>();
+            // Search for the next parent up the chain
+            _parent = transform.parent != null ? transform.parent.GetComponentInParent<Style>() : null;
             if (null != _parent)
             {
                 if (null == _parent._children)
@@ -113,9 +133,31 @@ namespace NoZ.UI
 
             // Find the active style sheet.
             _activeSheet = _styleSheet;
-            var parent = _parent;
-            while (_activeSheet == null && parent != null)
+
+            // Find the active style sheet from our parent?
+            for (var parent = _parent; _activeSheet == null && parent != null; parent = parent.parent)
                 _activeSheet = parent._activeSheet;
+
+            // If we have a style sheet then propegate it to our children
+            if (_activeSheet != null)
+                PropegateStyleSheet();
+        }
+
+        private void PropegateStyleSheet()
+        {
+            if (_children == null)
+                return;
+
+            foreach (var child in _children)
+            {
+                if(child._styleSheet == null)
+                {
+                    child._activeSheet = _activeSheet;
+                    child.PropegateStyleSheet();
+                }
+            }
+
+            Apply();
         }
 
         private void UnlinkFromParent ()
@@ -129,37 +171,36 @@ namespace NoZ.UI
             isLinked = false;
         }
 
-        protected override void OnTransformParentChanged()
+        private void OnTransformParentChanged()
         {
-            base.OnTransformParentChanged();
             UnlinkFromParent();
             LinkToParent();
             Apply();
         }
 
-        protected override void OnEnable()
+        private void OnEnable()
         {
-            base.OnEnable();
-
             Attach();
             LinkToParent();
             Apply();
 
-            StyleSheet.onReload += Attach;
-            StyleSheet.onReload += Apply;
+            StyleSheet.onReload += OnReload;
         }
 
-        protected override void OnDisable()
+        private void OnDisable()
         {
-            base.OnDisable();
-
-            StyleSheet.onReload -= Attach;
-            StyleSheet.onReload -= Apply;
+            StyleSheet.onReload -= OnReload;
         }
 
-        public void Apply ()
+        private void OnReload ()
         {
-            if (null == _targets)
+            Attach();
+            Apply();
+        }
+
+        public void Apply (bool recurseChildren=false)
+        {
+            if (null == _targets || null == _activeSheet)
                 return;
 
             foreach(var target in _targets)
@@ -169,19 +210,16 @@ namespace NoZ.UI
 
                 // Apply all properties for the target
                 foreach (var propertyDef in targetDef.properties)
-                    propertyDef.Apply(_styleSheet, this, target);
+                    propertyDef.Apply(_activeSheet, this, target);
             }
+
+            // Apply to all children as well.  This is generally done when a state provider changes.
+            if (recurseChildren && _children != null)
+                foreach (var child in _children)
+                    child.Apply(child._stateProvider == null);
         }
 
-        public static void RegisterStateProvider<T>(Type componentType) where T : Component
-        {
-            if (_stateProviders.Any(p => p.componentType == componentType))
-                throw new InvalidOperationException("only one provider can be registered for any component type");
-
-            _stateProviders.Add(new StateProviderInfo { componentType = componentType, providerType = typeof(T) });
-        }
-
-        public static int StringToHash(string name) => Animator.StringToHash(name);
+        public static int StringToHash(string name) => Animator.StringToHash(name.ToLower());
 
         private static StyleTargetInfo GetOrCreateStyleTargetInfo(Type targetType)
         {
@@ -189,54 +227,117 @@ namespace NoZ.UI
                 return targetDef;
 
             targetDef = new StyleTargetInfo { type = targetType };
-            targetDef.properties = new List<StylePropertyInfo>();
+            targetDef.properties = new List<StyleTargetPropertyInfo>();
             _targetInfos[targetType] = targetDef;
             return targetDef;
         }
 
-        public static void RegisterPropertyParser<T>(Func<string, T> parse)
+        /// <summary>
+        /// Register a state style system state provider that attaches to a known component on the game object
+        /// that the style is attached to.
+        /// </summary>
+        /// <typeparam name="ProviderType">Type of the provider</typeparam>
+        /// <typeparam name="ComponentType">Type of the component to attach to</typeparam>
+        public static void RegisterStateProvider<ProviderType,ComponentType>() where ProviderType : Component
         {
-            StylePropertyInfo<T>.parse = parse;
+            if (_stateProviders.Any(p => p.componentType == typeof(ComponentType)))
+                throw new InvalidOperationException("only one provider can be registered for any component type");
+
+            _stateProviders.Add(new StateProviderInfo { componentType = typeof(ComponentType), providerType = typeof(ProviderType) });
         }
 
-        public static void RegisterProperty<T>(Type targetType, string name, Action<Component, T> apply, T defaultValue)
+        /// <summary>
+        /// Register a property type with the style system by providing a method that can be used to parse
+        /// a property value from a string to the property type.
+        /// </summary>
+        /// <typeparam name="PropertyType">Type of the property</typeparam>
+        /// <param name="parse">Method used to parse a property</param>
+        public static void RegisterPropertyType<PropertyType>(Func<string, PropertyType> parse)
+        {
+            if (null == parse)
+                throw new ArgumentNullException("parse");
+
+            // Can only register once
+            if (StylePropertyInfo<PropertyType>.parse != null)
+                throw new InvalidOperationException($"Property type \"{typeof(PropertyType)}\" is already registered");
+
+            StylePropertyInfo<PropertyType>.parse = parse;
+        }
+
+        /// <summary>
+        /// Register a property with the style system and provide a default value for the property.
+        /// </summary>
+        /// <typeparam name="PropertyType">Type of the property</typeparam>
+        /// <param name="name">Name of the property</param>
+        /// <param name="defaultValue">Default value for the property</param>
+        public static void RegisterProperty<PropertyType>(string name, PropertyType defaultValue)
         {
             // Make sure the property isnt already registered
-            var nameHashId = Style.StringToHash(name);
+            var nameHashId = StringToHash(name);
             if (_propertyInfos.ContainsKey(nameHashId))
                 throw new InvalidOperationException("Duplicate propety names are not allowed");
 
             // Create the property and add it to the global property info dictionary
-            var propertyInfo = new StylePropertyInfo<T>
+            var propertyInfo = new StylePropertyInfo<PropertyType>
             {
                 name = name,
                 nameHashId = nameHashId,
-                thunkApply = StylePropertyInfo<T>.ThunkApply,
-                thunkParse = StylePropertyInfo<T>.ThunkParse,
-                apply = apply,
-                defaultValue = defaultValue
+                defaultValue = defaultValue,
+                thunkParse = StylePropertyInfo<PropertyType>.ThunkParse
             };
-            _propertyInfos[nameHashId] = propertyInfo;
 
-            // Add the property to the target type
-            GetOrCreateStyleTargetInfo(targetType).properties.Add(propertyInfo);
+            _propertyInfos[nameHashId] = propertyInfo;
+        }
+
+        /// <summary>
+        /// Register a property for a specific component
+        /// </summary>
+        /// <typeparam name="TargetType">Target component type</typeparam>
+        /// <typeparam name="PropertyType">Target property type</typeparam>
+        /// <param name="name">Name of the property</param>
+        /// <param name="apply">Method to use to apply the property value to the target</param>
+        public static void RegisterTargetProperty<TargetType, PropertyType>(string name, Action<TargetType, PropertyType> apply) where TargetType : Component
+        {
+            var nameHashId = StringToHash(name);
+            if(!_propertyInfos.TryGetValue(nameHashId, out var propertyInfo))
+                throw new InvalidOperationException($"Unknown property \"{name}\"");
+
+            // Create the property and add it to the global property info dictionary           
+            GetOrCreateStyleTargetInfo(typeof(TargetType)).properties.Add(
+                new StyleTargetPropertyInfo<TargetType, PropertyType>
+                {
+                    propertyInfo = propertyInfo,
+                    thunkApply = StyleTargetPropertyInfo<TargetType, PropertyType>.ThunkApply,
+                    apply = apply
+                });
         }
 
         static Style ()
         {
             // Register state providers
-            RegisterStateProvider<SelectableStateProvider>(typeof(UnityEngine.UI.Selectable));
+            RegisterStateProvider<SelectableStateProvider, UnityEngine.UI.Selectable>();
 
-            // Register parser
-            RegisterPropertyParser<float>((s) => float.TryParse(s, out var value) ? value : 0.0f);
-            RegisterPropertyParser<string>((s) => s);
-            RegisterPropertyParser<Color>((s) => ColorUtility.TryParseHtmlString(s, out var value) ? value : Color.white);
+            // Property types
+            RegisterPropertyType((s) => float.TryParse(s, out var value) ? value : 0.0f);
+            RegisterPropertyType((s) => bool.TryParse(s, out var value) ? value : false);
+            RegisterPropertyType((s) => s);
+            RegisterPropertyType((s) => ColorUtility.TryParseHtmlString(s, out var value) ? value : Color.white);
+
+            // Properties
+            RegisterProperty("color", Color.white);
+            RegisterProperty("scale", 1.0f);
 
             // RectTransform
-            RegisterProperty<float>(typeof(RectTransform), "scale", (c, v) => { (c as Transform).localScale = new Vector3(v, v, v); }, 1.0f);
+            RegisterTargetProperty<RectTransform,float>("scale", (t, v) => { t.localScale = new Vector3(v, v, v); });
 
             // Image
-            RegisterProperty<Color>(typeof(UnityEngine.UI.Image), "image-color", (c, v) => { (c as UnityEngine.UI.Image).color = v; }, Color.white);
+            RegisterTargetProperty<UnityEngine.UI.Image,Color>("color", (i, v) => { i.color = v; });
+
+            // Text
+            RegisterTargetProperty<UnityEngine.UI.Text, Color>("color", (c, v) => { c.color = v; });
+
+            // TextMeshPro
+            RegisterTargetProperty<TMPro.TextMeshProUGUI, Color>("color", (c, v) => { c.color = v; });
         }
     }
 }
