@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEditor.Animations;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -6,33 +7,106 @@ namespace NoZ.UI
 {
     public class UIStyle : UIBehaviour, ISelectHandler, IDeselectHandler
     {
+        public enum State
+        {
+            Normal,
+            Hover,
+            Pressed,
+            Selected,
+            SelectedHover,
+            SelectedPressed,
+            Disabled
+        }
+
         [Tooltip("Optional style sheet style and all children")]
         [SerializeField] private UIStyleSheet _styleSheet = null;
+
+        [Tooltip("Identifier of the style")]
+        [SerializeField] private string _styleId = null;
+
+        [Tooltip("Optional identifier of the style that this style is based on")]
+        [SerializeField] private string _styleBase = null;
+
 
         private UIBehaviour[] _behaviours;
 
         private UnityEngine.UI.Selectable _selectable;
 
         private UIStyle _parent = null;
+        private int _styleIdHash = 0;
+        private int _styleBaseHash = 0;
 
-        private bool _hover = false;
-        private bool _pressed = false;
+        // TODO: style id should be parent + . + _styleId
+        public string styleId => _styleId;
+        public int styleIdHash => _styleIdHash;
+
+        public string baseId => _styleBase;
+        public int baseIdHash => _styleBaseHash;
+
+        private State _animationState = State.Normal;
+        private State _state = State.Normal;
+        private UIStyleSheet _activeSheet = null;
+
         private bool _selected = false;
 
-        public bool isSelected => _selected || (_parent != null ? _parent.isSelected : false);
-        public bool isHover => _hover || (_parent != null ? _parent.isHover : false);
-        public bool isPressed => _pressed || (_parent != null ? _parent.isPressed : false);
+        public UIBehaviour[] targets => _behaviours;
+
+        public UIStyle parent => null;
+
+        public List<UIStyle> _children;
+
+        public bool isLinked { get; private set; }
+
+        public State state => _state;
+
+
+
+
+        private void LinkToParent ()
+        {
+            if (isLinked)
+                return;
+
+            _parent = transform.parent.GetComponentInParent<UIStyle>();
+            if (null != _parent)
+                _parent._children.Add(this);
+
+            isLinked = true;
+
+            // Find the active style sheet.
+            _activeSheet = _styleSheet;
+            var parent = _parent;
+            while (_activeSheet == null && parent != null)
+                _activeSheet = parent._activeSheet;
+        }
+
+        private void UnlinkFromParent ()
+        {
+            if (!isLinked)
+                return;
+
+            if (_parent != null)
+                _parent._children.Remove(this);
+
+            isLinked = false;
+        }
 
         protected override void OnTransformParentChanged()
         {
             base.OnTransformParentChanged();
-
-            _parent = transform.parent.GetComponentInParent<UIStyle>();            
+            UnlinkFromParent();
+            LinkToParent();
+            Apply();
         }
+
+
 
         protected override void OnEnable()
         {
-            base.OnEnable();            
+            base.OnEnable();
+
+            _styleIdHash = StringToHash(styleId);
+            _styleBaseHash = StringToHash(_styleBase);
 
             var button = GetComponent<UnityEngine.UI.Button>();
             if(button != null)
@@ -42,9 +116,10 @@ namespace NoZ.UI
 
             _behaviours = GetComponents<UIBehaviour>();
 
-            UpdateProperties();
+            LinkToParent();
+            Apply();
 
-            UIStyleSheet.onReload += UpdateProperties;
+            UIStyleSheet.onReload += Apply;
 
             HookSelectable();
         }
@@ -53,53 +128,7 @@ namespace NoZ.UI
         {
             base.OnDisable();
 
-            UIStyleSheet.onReload -= UpdateProperties;
-        }
-
-        private void UpdateProperties ()
-        {
-            if (null == _behaviours)
-                return;
-
-            foreach (var s in GetComponentsInChildren<UIStyle>())
-                if(s != this)
-                    s.UpdateProperties();
-
-            foreach(var behaviour in _behaviours)
-            {
-                if (behaviour is UnityEngine.UI.Image image)
-                    image.color = _styleSheet.GetColor(this);
-            }
-        }
-
-        public void OnPointerEnter(PointerEventData eventData)
-        {
-            _hover = true;
-            UpdateProperties();
-        }
-
-        public void OnPointerExit(PointerEventData eventData)
-        {
-            _hover = false;
-            UpdateProperties();
-        }
-
-        public void OnPointerDown(PointerEventData eventData)
-        {
-            if(eventData.button == PointerEventData.InputButton.Left)
-            {
-                _pressed = true;
-                UpdateProperties();
-            }
-        }
-
-        public void OnPointerUp(PointerEventData eventData)
-        {
-            if (eventData.button == PointerEventData.InputButton.Left)
-            {
-                _pressed = false;
-                UpdateProperties();
-            }
+            UIStyleSheet.onReload -= Apply;
         }
 
         public void HookSelectable ()
@@ -145,27 +174,54 @@ namespace NoZ.UI
 
         private void OnAnimationState(int hash)
         {
-            _hover = false;
-            _pressed = false;            
+            _animationState = State.Normal;
 
             if (hash == Animator.StringToHash(_selectable.animationTriggers.highlightedTrigger))
-                _hover = true;
+                _animationState = State.Hover;
             else if (hash == Animator.StringToHash(_selectable.animationTriggers.pressedTrigger))
-                _pressed = true;
+                _animationState = State.Pressed;
+            else if (hash == Animator.StringToHash(_selectable.animationTriggers.disabledTrigger))
+                _animationState = State.Disabled;
+            else if (hash == Animator.StringToHash(_selectable.animationTriggers.selectedTrigger))
+                _animationState = State.Selected;
 
-            UpdateProperties();
+            UpdateState();
+        }
+
+        private void UpdateState()
+        {
+            if (_selectable == null && _parent != null)
+                _state = _parent.state;
+            else if (_selected && _animationState == State.Hover)
+                _state = State.SelectedHover;
+            else if (_selected && _animationState == State.Pressed)
+                _state = State.SelectedPressed;
+            else
+                _state = _animationState;
+
+            foreach(var child in _children)
+                child.UpdateState();
+
+            Apply();
         }
 
         public void OnSelect(BaseEventData eventData)
         {
             _selected = true;
-            UpdateProperties();
+            Apply();
         }
 
         public void OnDeselect(BaseEventData eventData)
         {
             _selected = false;
-            UpdateProperties();
+            Apply();
+        }
+
+        public static int StringToHash(string name) => Animator.StringToHash(name);
+
+        public void Apply ()
+        {
+            _styleSheet.Apply(this);
         }
     }
 }
