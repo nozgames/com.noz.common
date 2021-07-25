@@ -45,7 +45,7 @@ namespace NoZ.UI
         public override void OnImportAsset(AssetImportContext ctx)
         {
             var text = File.ReadAllText(ctx.assetPath);
-            var sheet = UIStyleSheet.Parse(text);
+            var sheet = StyleSheet.Parse(text);
             if (null == sheet)
                 return;
 

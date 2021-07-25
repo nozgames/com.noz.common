@@ -13,7 +13,7 @@ namespace NoZ.UI
             {
                 if (str.EndsWith(".uiss"))
                 {
-                    UIStyleSheet.ReloadAll();
+                    StyleSheet.ReloadAll();
                     return;
                 }
             }

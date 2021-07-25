@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace NoZ.UI
 {
-    public class UIStyleAnimationState : StateMachineBehaviour
+    public class StyleAnimatorState : StateMachineBehaviour
     {
         public System.Action<int> onStateEnter;
 
@@ -11,6 +11,5 @@ namespace NoZ.UI
             onStateEnter?.Invoke(stateInfo.shortNameHash);
         }
     }
-
 }
 
