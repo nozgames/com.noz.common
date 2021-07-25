@@ -32,12 +32,12 @@ namespace NoZ.UI
             public TargetDefinition targetDef;
 
             public abstract PropertyValue Parse(string value);
-            public abstract void Apply(UIStyleSheet sheet, UIStyle style, MonoBehaviour monoBehaviour);
+            public abstract void Apply(UIStyleSheet sheet, UIStyle style, Component component);
         }
 
         private class ColorPropertyDefinition : PropertyDefinition
         {
-            public Action<MonoBehaviour, Color> apply;
+            public Action<Component, Color> apply;
 
             public override PropertyValue Parse(string value)
             {
@@ -47,9 +47,27 @@ namespace NoZ.UI
                 return new ColorPropertyValue { value = color };
             }
 
-            public override void Apply(UIStyleSheet sheet, UIStyle style, MonoBehaviour monoBehaviour)
+            public override void Apply(UIStyleSheet sheet, UIStyle style, Component component)
             {
-                apply(monoBehaviour, sheet.GetColor(style, nameHashId));
+                apply(component, sheet.GetColor(style, nameHashId));
+            }
+        }
+
+        private class FloatPropertyDefinition : PropertyDefinition
+        {
+            public Action<Component, float> apply;
+
+            public override PropertyValue Parse(string value)
+            {
+                if (!float.TryParse(value, out var floatValue))
+                    throw new FormatException($"invalid number format '{value}'");
+
+                return new FloatPropertyValue { value = floatValue };
+            }
+
+            public override void Apply(UIStyleSheet sheet, UIStyle style, Component component)
+            {
+                apply(component, sheet.GetFloat(style, nameHashId));
             }
         }
 
@@ -84,9 +102,14 @@ namespace NoZ.UI
             _propertyDefinitions[propertyDef.nameHashId] = propertyDef;
         }
 
-        public static void RegisterColorProperty (Type targetType, string name, Action<MonoBehaviour,Color> apply)
+        public static void RegisterColorProperty (Type targetType, string name, Action<Component, Color> apply)
         {
             RegisterProperty(targetType, new ColorPropertyDefinition { name = name, nameHashId = UIStyle.StringToHash(name), apply = apply });
+        }
+
+        public static void RegisterFloatProperty(Type targetType, string name, Action<Component, float> apply)
+        {
+            RegisterProperty(targetType, new FloatPropertyDefinition { name = name, nameHashId = UIStyle.StringToHash(name), apply = apply });
         }
 
         public static event Action onReload;
@@ -108,6 +131,11 @@ namespace NoZ.UI
         private class StringPropertyValue : PropertyValue
         {
             public string value;
+        }
+
+        private class FloatPropertyValue : PropertyValue
+        {
+            public float value;
         }
 
         private Dictionary<int, Dictionary<ulong, PropertyValue>> _properties;
@@ -149,7 +177,7 @@ namespace NoZ.UI
             if (!_properties.TryGetValue(propertyId, out var properties))
                 return null;
 
-            return Search<T>(properties, style.styleIdHash, style.baseIdHash, style.state);            
+            return Search<T>(properties, style.idHash, style.inheritHash, style.state);            
         }
 
         /// <summary>
@@ -176,7 +204,7 @@ namespace NoZ.UI
         /// <param name="propertyId"></param>
         /// <param name="flags"></param>
         /// <returns></returns>
-        public string GetString(UIStyle style, int propertyId)
+        public string GetString (UIStyle style, int propertyId)
         {
             var property = Search<StringPropertyValue>(style, propertyId);
             if (null == property)
@@ -189,6 +217,21 @@ namespace NoZ.UI
 
             return property.value;
         }
+
+        public float GetFloat (UIStyle style, int propertyId)
+        {
+            var property = Search<FloatPropertyValue>(style, propertyId);
+            if (null == property)
+            {
+                if (style.parent != null)
+                    return GetFloat(style.parent, propertyId);
+
+                return 0.0f;
+            }
+
+            return property.value;
+        }
+
 
         private static Regex ParseRegex = new Regex(@"(\w[\w_-]*|\#\w[\w\d_\-\:]*|{|}|;|:|\d+|\#[\dAaBbCcDdEeFf]+)", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture | RegexOptions.IgnorePatternWhitespace);
 
