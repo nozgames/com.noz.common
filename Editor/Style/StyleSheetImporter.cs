@@ -47,6 +47,11 @@ namespace NoZ.Style
             if (null == sheet)
                 return;
 
+            if(sheet.hasError)
+            {
+                Debug.LogError($"{ctx.assetPath}({sheet.errorLine}): error: {sheet.error}", sheet);
+            }
+
             ctx.AddObjectToAsset("Sheet", sheet);
             ctx.SetMainObject(sheet);
         }

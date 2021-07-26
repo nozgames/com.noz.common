@@ -3,6 +3,8 @@ using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
 
+// TODO: id = (parent with provider name) - (name)
+
 namespace NoZ.Style
 {
     public class Style : MonoBehaviour
@@ -23,9 +25,6 @@ namespace NoZ.Style
 
         [Tooltip("Identifier of the style")]
         [SerializeField] private string _id = null;
-
-        [Tooltip("Optional identifier of the style that this style is based on")]
-        [SerializeField] private string _inherit= null;
 
         /// <summary>
         /// Global list of register state providers
@@ -62,11 +61,6 @@ namespace NoZ.Style
         /// Hash of the style identifier
         /// </summary>
         internal int idHash { get; private set; }
-
-        /// <summary>
-        /// Hash of the inherit identifier
-        /// </summary>
-        internal int inheritHash { get; private set; }
 
 
         private StyleSheet _activeSheet = null;
@@ -205,7 +199,6 @@ namespace NoZ.Style
         private void OnEnable()
         {
             idHash = StringToHash(string.IsNullOrEmpty(_id) ? name : _id);
-            inheritHash = StringToHash(_inherit);
 
             Attach();
             LinkToParent();
