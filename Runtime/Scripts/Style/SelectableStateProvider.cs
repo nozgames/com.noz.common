@@ -17,6 +17,8 @@ namespace NoZ.Style
         private bool _selected = false;
         private Selectable _selectable;
 
+        public Selectable selectable => _selectable;
+
         private static int AddAnimationControllerState (AnimatorController controller, AnimatorStateMachine stateMachine, string name)
         {
             controller.AddParameter(name, AnimatorControllerParameterType.Trigger);
@@ -103,16 +105,22 @@ namespace NoZ.Style
             UpdateState();
         }
 
-        private void UpdateState()
+        protected void UpdateState() => state = GetCurrentState();
+
+        protected virtual Style.State GetCurrentState()
         {
+            var currentState = _animationState;
             if (!_selectable.interactable)
-                state = Style.State.Disabled;
+                currentState = Style.State.Disabled;
             else if (_selected && _animationState == Style.State.Hover)
-                state = Style.State.SelectedHover;
+                currentState = Style.State.SelectedHover;
             else if (_selected && _animationState == Style.State.Pressed)
-                state = Style.State.SelectedPressed;
-            else
-                state = _animationState;
+                currentState = Style.State.SelectedPressed;
+
+            return currentState;
         }
+
+        protected virtual void OnEnable() { }
+        protected virtual void OnDisable() { }
     }
 }

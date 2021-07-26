@@ -26,15 +26,6 @@ namespace NoZ.Style
             if (null == targetPropertyInfoT)
                 return;
 
-            if (null == (targetPropertyInfoT.propertyInfo as StylePropertyInfo<PropertyType>))
-                Debug.Log("#1");
-
-            if (null == targetPropertyInfo.propertyInfo)
-                Debug.Log("#2");
-
-            if (null == sheet)
-                Debug.Log("#3");
-
             targetPropertyInfoT.apply(
                 component as TargetType,  
                 sheet.GetValue(
@@ -48,5 +39,17 @@ namespace NoZ.Style
     {
         public Type type;
         public List<StyleTargetPropertyInfo> properties;
+
+        public void AddProperty<TargetType, PropertyType>(StylePropertyInfo propertyInfo, Action<TargetType, PropertyType> apply) where TargetType : Component
+        {
+            properties.Add(
+                new StyleTargetPropertyInfo<TargetType, PropertyType>
+                {
+                    propertyInfo = propertyInfo,
+                    thunkApply = StyleTargetPropertyInfo<TargetType, PropertyType>.ThunkApply,
+                    apply = apply
+                });
+        }
+
     }
 }

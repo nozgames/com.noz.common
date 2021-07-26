@@ -323,18 +323,13 @@ namespace NoZ.Style
                 throw new InvalidOperationException($"Unknown property \"{name}\"");
 
             // Create the property and add it to the global property info dictionary           
-            GetOrCreateStyleTargetInfo(typeof(TargetType)).properties.Add(
-                new StyleTargetPropertyInfo<TargetType, PropertyType>
-                {
-                    propertyInfo = propertyInfo,
-                    thunkApply = StyleTargetPropertyInfo<TargetType, PropertyType>.ThunkApply,
-                    apply = apply
-                });
+            GetOrCreateStyleTargetInfo(typeof(TargetType)).AddProperty(propertyInfo, apply);
         }
 
         static Style ()
         {
             // Register state providers
+            RegisterStateProvider<ToggleStateProvider, UnityEngine.UI.Toggle>();
             RegisterStateProvider<SelectableStateProvider, UnityEngine.UI.Selectable>();
 
             // Property types

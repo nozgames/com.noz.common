@@ -20,6 +20,7 @@ namespace NoZ.Style
                     return;
 
                 _state = value;
+
                 onStateChanged?.Invoke(this);
             }
         }
