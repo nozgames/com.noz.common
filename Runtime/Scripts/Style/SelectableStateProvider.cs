@@ -15,6 +15,7 @@ namespace NoZ.Style
 
         private Style.State _animationState = Style.State.Normal;
         private bool _selected = false;
+        private Selectable _selectable;
 
         private static int AddAnimationControllerState (AnimatorController controller, AnimatorStateMachine stateMachine, string name)
         {
@@ -59,6 +60,8 @@ namespace NoZ.Style
             selectable.animationTriggers.selectedTrigger = "Selected";
             selectable.animationTriggers.disabledTrigger = "Disabled";
 
+            _selectable = selectable;
+
             var animator = selectable.animator;
             if (null == selectable.animator)
                 animator = selectable.gameObject.AddComponent<Animator>();
@@ -102,7 +105,9 @@ namespace NoZ.Style
 
         private void UpdateState()
         {
-            if (_selected && _animationState == Style.State.Hover)
+            if (!_selectable.interactable)
+                state = Style.State.Disabled;
+            else if (_selected && _animationState == Style.State.Hover)
                 state = Style.State.SelectedHover;
             else if (_selected && _animationState == Style.State.Pressed)
                 state = Style.State.SelectedPressed;
