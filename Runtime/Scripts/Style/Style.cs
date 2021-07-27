@@ -353,6 +353,7 @@ namespace NoZ.Style
 
             // TextMeshPro
             RegisterTargetProperty<TMPro.TextMeshProUGUI, Color>("color", (c, v) => { c.color = v; });
+            RegisterTargetProperty<TMPro.TMP_InputField, Color>("color", (c, v) => { c.selectionColor = v; });
         }
     }
 }

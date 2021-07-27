@@ -86,10 +86,13 @@ namespace NoZ.Style
                 return propertyValue;
 
             var state = style.state;
-            if (state == Style.State.SelectedHover || state == Style.State.SelectedPressed)
-                propertyValue = Search(properties, MakeSelector(style.idHash, Style.State.Selected));
+            if (state == Style.State.SelectedHover)
+                propertyValue = Search(properties, MakeSelector(style.idHash, Style.State.Hover));
 
-            if(null == propertyValue && state != Style.State.Normal)
+            if (null == propertyValue && state == Style.State.SelectedPressed)
+                propertyValue = Search(properties, MakeSelector(style.idHash, Style.State.Pressed));
+
+            if (null == propertyValue && state != Style.State.Normal)
                 propertyValue = Search(properties, MakeSelector(style.idHash, Style.State.Normal));
 
             return propertyValue;
@@ -269,6 +272,21 @@ namespace NoZ.Style
             serializedProperties.Add(new SerializedProperty { name = name, value = value });
         }
 
+        private void SetBaseSelector (ulong selector, ulong baseSelector)
+        {
+            if (baseSelector == selector)
+                return;
+
+            var checkBaseSelector = baseSelector;
+            while(_selectorBase.TryGetValue(checkBaseSelector, out checkBaseSelector))
+            {
+                if (checkBaseSelector == selector)
+                    return;
+            }
+
+            _selectorBase[selector] = baseSelector;
+        }
+
         private void BuildPropertyDictionary()
         {
             // Populate the dictionary from the serialized values
@@ -285,7 +303,25 @@ namespace NoZ.Style
 
                 // Inheritence
                 if(!string.IsNullOrEmpty(serializedStyle.inherit.name))
-                    _selectorBase[selector] = MakeSelector(Style.StringToHash(serializedStyle.inherit.name), serializedStyle.inherit.state);
+                {
+                    var inheritNameHashId = Style.StringToHash(serializedStyle.inherit.name);
+                    // If a state is specified then inherit only that state
+                    if (serializedStyle.selector.state != Style.State.Normal)
+                        SetBaseSelector(selector,MakeSelector(inheritNameHashId, serializedStyle.inherit.state));
+                    // Set all states to one state?
+                    else if (serializedStyle.inherit.state != Style.State.Normal)
+                    {
+                        var baseSelector = MakeSelector(inheritNameHashId, serializedStyle.inherit.state);
+                        foreach (var state in Enum.GetValues(typeof(Style.State)) as Style.State[])
+                            SetBaseSelector(MakeSelector(styleNameHashId, state), baseSelector);
+                    }
+                    else
+                    {
+                        foreach(var state in Enum.GetValues(typeof(Style.State)) as Style.State[])
+                            SetBaseSelector(MakeSelector(styleNameHashId, state), MakeSelector(inheritNameHashId, state));
+                    }
+                }
+                    
 
                 foreach (var serializedProperty in serializedStyle.properties)
                 {

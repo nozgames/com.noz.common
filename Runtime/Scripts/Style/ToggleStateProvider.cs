@@ -27,7 +27,7 @@ namespace NoZ.Style
             var toggle = selectable as Toggle;
             var state = base.GetCurrentState();
 
-            if(toggle.isOn && toggle.group != null)
+            if(toggle.isOn)
             {
                 switch(state)
                 {
