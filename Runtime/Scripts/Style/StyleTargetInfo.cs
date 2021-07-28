@@ -26,12 +26,8 @@ namespace NoZ.Style
             if (null == targetPropertyInfoT)
                 return;
 
-            targetPropertyInfoT.apply(
-                component as TargetType,  
-                sheet.GetValue(
-                    style, 
-                    targetPropertyInfo.propertyInfo.nameHashId, 
-                    (targetPropertyInfoT.propertyInfo as StylePropertyInfo<PropertyType>).defaultValue));
+            if (sheet.TryGetValue(style, targetPropertyInfo.propertyInfo.nameHashId, out PropertyType value))
+                targetPropertyInfoT.apply(component as TargetType, value);
         }
     }
 

@@ -8,7 +8,7 @@ namespace NoZ.Style
     public class StyleSheet : ScriptableObject
     {
         private static Regex ParseRegex = new Regex(
-            @"([A-Za-z][\w_-]*|\#[A-Za-z][\w_\-\:]*|{|}|;|:|\.|\d\.?\d*|\#[\dA-Fa-f]+|//.*\n)", 
+            @"([A-Za-z][\w_-]*|\#[A-Za-z][\w_\-\:]*|{|}|;|:|,|\.|\d\.?\d*|\#[\dA-Fa-f]+|//.*\n)", 
             RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture | RegexOptions.IgnorePatternWhitespace);
 
         public static event Action onReload;
@@ -24,7 +24,7 @@ namespace NoZ.Style
         private struct SerializedSelector
         {
             public string name;
-            public Style.State state;
+            public int state;
         }
 
         [Serializable]
@@ -52,7 +52,12 @@ namespace NoZ.Style
             onReload?.Invoke();
         }
 
-        private static ulong MakeSelector (int hash, Style.State state) => ((ulong)hash) + (((ulong)state) << 32);
+        private static ulong MakeSelector(int hash, Style.State state)
+        {
+            if ((int)state == -1)
+                state = (int)Style.State.Normal;
+            return ((ulong)hash) + (((ulong)state) << 32);
+        }
 
         private StylePropertyValue Search (Dictionary<ulong, StylePropertyValue> properties, ulong selector)
         {
@@ -98,21 +103,20 @@ namespace NoZ.Style
             return propertyValue;
         }
 
-        public T GetValue<T> (Style style, string propertyName, T defaultValue) => 
-            GetValue<T>(style, Style.StringToHash(propertyName), defaultValue);
+        public bool TryGetValue<T> (Style style, string propertyName, out T value) => 
+            TryGetValue<T>(style, Style.StringToHash(propertyName), out value);
 
-        public T GetValue<T> (Style style, int propertyNameHashId, T defaultValue)
+        public bool TryGetValue<T> (Style style, int propertyNameHashId, out T value)
         {
             var property = Search(style, propertyNameHashId) as StylePropertyValue<T>;
             if (null == property)
             {
-                if (style.parent != null)
-                    return GetValue<T>(style.parent, propertyNameHashId, defaultValue);
-
-                return defaultValue;
+                value = default(T);
+                return false;
             }
 
-            return property.value;
+            value = property.value;
+            return true;
         }
 
         private class Token
@@ -181,14 +185,14 @@ namespace NoZ.Style
             return sheet;
         }
 
-        private ulong ParseSelector (List<Token> tokens, ref int tokenIndex, ref SerializedSelector serializedSelector)
+        private void ParseSelector (List<Token> tokens, ref int tokenIndex, ref SerializedSelector serializedSelector)
         {
             var token = tokens[tokenIndex++].value;
             if(token[0] != '#')
                 throw new ParseException(tokens[tokenIndex-1], "selector must begin with #");
 
             var name = token.Substring(1);
-            var state = Style.State.Normal;
+            var state = -1;
 
             var colon = name.IndexOf(':');
             if (colon != -1)
@@ -197,42 +201,54 @@ namespace NoZ.Style
                 name = name.Substring(0, colon);
 
                 if (stateName == "hover")
-                    state = Style.State.Hover;
+                    state = (int)Style.State.Hover;
+                else if (stateName == "normal")
+                    state = (int)Style.State.Normal;
                 else if (stateName == "disabled")
-                    state = Style.State.Disabled;
+                    state = (int)Style.State.Disabled;
                 else if (stateName == "pressed")
-                    state = Style.State.Pressed;
+                    state = (int)Style.State.Pressed;
                 else if (stateName == "selected")
-                    state = Style.State.Selected;
+                    state = (int)Style.State.Selected;
                 else if (stateName == "selected:hover")
-                    state = Style.State.SelectedHover;
+                    state = (int)Style.State.SelectedHover;
                 else if (stateName == "selected:pressed")
-                    state = Style.State.SelectedPressed;
+                    state = (int)Style.State.SelectedPressed;
                 else
                     throw new ParseException(tokens[tokenIndex - 1], $"unknown state \"{stateName}\"");
             }
 
             serializedSelector.name = name;
             serializedSelector.state = state;
-
-            return MakeSelector(Style.StringToHash(name), state);
         }
 
         private void ParseStyle (List<Token> tokens, ref int tokenIndex, List<SerializedStyle> serializedStyles)
         {
-            var serializedStyle = new SerializedStyle();
-            ParseSelector(tokens, ref tokenIndex, ref serializedStyle.selector);
+            var selectors = new List<SerializedSelector>();
+
+            while(true)
+            {
+                SerializedSelector selector = new SerializedSelector();
+                ParseSelector(tokens, ref tokenIndex, ref selector);
+                selectors.Add(selector);
+
+                if (tokens[tokenIndex].value != ",")
+                    break;
+
+                tokenIndex++;
+            } 
 
             // Base style?
-            if(tokens[tokenIndex].value == ":")
+            var baseSelector = new SerializedSelector();
+            if (tokens[tokenIndex].value == ":")
             {
                 tokenIndex++;
-                ParseSelector(tokens, ref tokenIndex, ref serializedStyle.inherit);
+                ParseSelector(tokens, ref tokenIndex, ref baseSelector);
 
                 var found = false;
                 foreach(var style in serializedStyles)
                 {
-                    if(style.selector.name == serializedStyle.inherit.name && style.selector.state == serializedStyle.inherit.state)
+                    if(style.selector.name == baseSelector.name && style.selector.state == baseSelector.state)
                     {
                         found = true;
                         break;
@@ -246,17 +262,23 @@ namespace NoZ.Style
             if (tokens[tokenIndex++].value != "{")
                 throw new ParseException(tokens[tokenIndex - 1], "missing \"{\"");
 
-            serializedStyles.Add(serializedStyle);
-
             // Read until the end brace
             var serializedProperties = new List<SerializedProperty>();
+
             while (tokens[tokenIndex].value != "}")
                 ParseProperty(tokens, ref tokenIndex, serializedProperties);
 
-            serializedStyle.properties = serializedProperties.ToArray();
-
             // SKip end brace
             tokenIndex++;
+
+            foreach (var selector in selectors)
+            {
+                var serializedStyle = new SerializedStyle();
+                serializedStyle.selector = selector; ;
+                serializedStyle.inherit = baseSelector;
+                serializedStyle.properties = serializedProperties.ToArray();
+                serializedStyles.Add(serializedStyle);
+            }
         }
 
         private void ParseProperty(List<Token> tokens, ref int tokenIndex, List<SerializedProperty> serializedProperties)
@@ -299,29 +321,36 @@ namespace NoZ.Style
             foreach (var serializedStyle in _styles)
             {
                 var styleNameHashId = Style.StringToHash(serializedStyle.selector.name);
-                var selector = MakeSelector(styleNameHashId, serializedStyle.selector.state);
+                var selector = MakeSelector(styleNameHashId, (Style.State)serializedStyle.selector.state);
 
                 // Inheritence
                 if(!string.IsNullOrEmpty(serializedStyle.inherit.name))
                 {
                     var inheritNameHashId = Style.StringToHash(serializedStyle.inherit.name);
-                    // If a state is specified then inherit only that state
-                    if (serializedStyle.selector.state != Style.State.Normal)
-                        SetBaseSelector(selector,MakeSelector(inheritNameHashId, serializedStyle.inherit.state));
-                    // Set all states to one state?
-                    else if (serializedStyle.inherit.state != Style.State.Normal)
+
+                    // If both states are "All" then inherit each state individually
+                    if (serializedStyle.selector.state == -1 && serializedStyle.inherit.state == -1)
                     {
-                        var baseSelector = MakeSelector(inheritNameHashId, serializedStyle.inherit.state);
+                        foreach (var state in Enum.GetValues(typeof(Style.State)) as Style.State[])
+                            SetBaseSelector(MakeSelector(styleNameHashId, state), MakeSelector(inheritNameHashId, state));
+                    }
+
+                    // If no state was specified for the selector then set all states for this selector to the same base state 
+                    else if (serializedStyle.selector.state == -1)
+                    {
+                        var baseSelector = MakeSelector(inheritNameHashId, (Style.State)serializedStyle.inherit.state);
                         foreach (var state in Enum.GetValues(typeof(Style.State)) as Style.State[])
                             SetBaseSelector(MakeSelector(styleNameHashId, state), baseSelector);
                     }
-                    else
-                    {
-                        foreach(var state in Enum.GetValues(typeof(Style.State)) as Style.State[])
-                            SetBaseSelector(MakeSelector(styleNameHashId, state), MakeSelector(inheritNameHashId, state));
-                    }
-                }
+
+                    // If no state was specified for the base then use the normal state
+                    else if (serializedStyle.inherit.state == -1)
+                        SetBaseSelector(selector, MakeSelector(inheritNameHashId, Style.State.Normal));
                     
+                    // Inerit one state from another..
+                    else
+                        SetBaseSelector(selector, MakeSelector(inheritNameHashId, (Style.State)serializedStyle.inherit.state));
+                }
 
                 foreach (var serializedProperty in serializedStyle.properties)
                 {

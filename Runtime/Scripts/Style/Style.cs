@@ -263,7 +263,21 @@ namespace NoZ.Style
             if (_stateProviders.Any(p => p.componentType == typeof(ComponentType)))
                 throw new InvalidOperationException("only one provider can be registered for any component type");
 
-            _stateProviders.Add(new StateProviderInfo { componentType = typeof(ComponentType), providerType = typeof(ProviderType) });
+            var providerInfo = new StateProviderInfo { componentType = typeof(ComponentType), providerType = typeof(ProviderType) };
+            
+            // Check to see if the state provider component is derived from any of the providers in the list 
+            // and if so make sure it is in the list first so it will be chosen over the base.
+            for (int i=0; i < _stateProviders.Count; i++)
+            {
+                if(_stateProviders[i].componentType.IsAssignableFrom(typeof(ComponentType)))
+                {
+                    _stateProviders.Insert(i, providerInfo);
+                    return;
+                }
+            }
+
+            // Add to the end
+            _stateProviders.Add(providerInfo);
         }
 
         /// <summary>
@@ -329,8 +343,8 @@ namespace NoZ.Style
         static Style ()
         {
             // Register state providers
-            RegisterStateProvider<ToggleStateProvider, UnityEngine.UI.Toggle>();
             RegisterStateProvider<SelectableStateProvider, UnityEngine.UI.Selectable>();
+            RegisterStateProvider<ToggleStateProvider, UnityEngine.UI.Toggle>();
 
             // Property types
             RegisterPropertyType((s) => float.TryParse(s, out var value) ? value : 0.0f);
@@ -341,6 +355,10 @@ namespace NoZ.Style
             // Properties
             RegisterProperty("color", Color.white);
             RegisterProperty("scale", 1.0f);
+            RegisterProperty("font-bold", false);
+            RegisterProperty("font-italic", false);
+            RegisterProperty("font-underline", false);
+            RegisterProperty("font-size", 1.0f);
 
             // RectTransform
             RegisterTargetProperty<RectTransform,float>("scale", (t, v) => { t.localScale = new Vector3(v, v, v); });
@@ -353,6 +371,11 @@ namespace NoZ.Style
 
             // TextMeshPro
             RegisterTargetProperty<TMPro.TextMeshProUGUI, Color>("color", (c, v) => { c.color = v; });
+            RegisterTargetProperty<TMPro.TextMeshProUGUI, bool>("font-bold", (c, v) => { c.fontWeight = v ? TMPro.FontWeight.Bold : TMPro.FontWeight.Regular; });
+            RegisterTargetProperty<TMPro.TextMeshProUGUI, bool>("font-italic", (c, v) => { if (v) c.fontStyle |= TMPro.FontStyles.Italic; else c.fontStyle &= ~(TMPro.FontStyles.Italic); });
+            RegisterTargetProperty<TMPro.TextMeshProUGUI, bool>("font-underline", (c, v) => { if (v) c.fontStyle |= TMPro.FontStyles.Underline; else c.fontStyle &= ~(TMPro.FontStyles.Underline); });
+            RegisterTargetProperty<TMPro.TextMeshProUGUI, float>("font-size", (c, v) => { c.fontSize = v; });
+
             RegisterTargetProperty<TMPro.TMP_InputField, Color>("color", (c, v) => { c.selectionColor = v; });
         }
     }
