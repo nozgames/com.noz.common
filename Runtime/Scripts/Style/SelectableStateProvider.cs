@@ -31,7 +31,7 @@ namespace NoZ.Style
             return Animator.StringToHash(name);
         }
 
-        internal override void Attach (Component component)
+        protected internal override void Attach (Component component)
         {
             var selectable = component as Selectable;
             if (null == selectable)

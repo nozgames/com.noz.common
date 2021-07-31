@@ -6,7 +6,7 @@ namespace NoZ.Style
 {
     public class ToggleStateProvider : SelectableStateProvider
     {
-        internal override void Attach(Component component)
+        protected internal override void Attach(Component component)
         {
             base.Attach(component);
             (selectable as Toggle).onValueChanged.AddListener(OnValueChanged);

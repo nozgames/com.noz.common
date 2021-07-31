@@ -25,6 +25,6 @@ namespace NoZ.Style
             }
         }
 
-        internal abstract void Attach(Component component);
+        protected internal abstract void Attach(Component component);
     }
 }

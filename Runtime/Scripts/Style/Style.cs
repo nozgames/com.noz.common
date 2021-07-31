@@ -366,6 +366,9 @@ namespace NoZ.Style
             // Image
             RegisterTargetProperty<UnityEngine.UI.Image,Color>("color", (i, v) => { i.color = v; });
 
+            // RawImage
+            RegisterTargetProperty<UnityEngine.UI.RawImage, Color>("color", (i, v) => { i.color = v; });
+
             // Text
             RegisterTargetProperty<UnityEngine.UI.Text, Color>("color", (c, v) => { c.color = v; });
 
