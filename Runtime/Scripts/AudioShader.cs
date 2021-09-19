@@ -17,15 +17,17 @@ namespace NoZ
             NotificationError
         }
 
-        public AudioClip AudioClip = null;
+        public AudioClip[] clips = null;
 
         [Range(0, 1)]
-        public float Volume = 1f;
+        public float volume = 1f;
 
         [Range(0, 2)]
-        public float Pitch = 1f;
+        public float pitch = 1f;
 
-        public HapticFeedbackType HapticFeedback = HapticFeedbackType.None;
+        public HapticFeedbackType hapticFeedback = HapticFeedbackType.None;
+
+        public AudioClip GetRandomClip() => (clips == null || clips.Length == 0) ? null : clips[Random.Range(0, clips.Length - 1)];
 
         public void Play()
         {
@@ -38,4 +40,17 @@ namespace NoZ
         }
     }
 
+    public static class AudioSourceExtensions
+    {
+        public static void PlayOneShot(this AudioSource source, AudioShader shader)
+        {
+            var clip = shader.GetRandomClip();
+            if (null == clip)
+                return;
+
+            source.volume = shader.volume;
+            source.pitch = shader.pitch;
+            source.PlayOneShot(clip);
+        }
+    }
 }

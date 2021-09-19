@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace NoZ
 {
@@ -54,12 +52,13 @@ namespace NoZ
 
         public void Play(AudioShader shader, float volume, float pitch)
         {
-            if (null == shader.AudioClip)
+            if (null == shader.clips)
                 return;
 
-            Play(shader.AudioClip, shader.Volume, shader.Pitch);
+            var clip = shader.clips[Random.Range(0, shader.clips.Length - 1)];
+            Play(clip, shader.volume, shader.pitch);
 
-            switch (shader.HapticFeedback)
+            switch (shader.hapticFeedback)
             {
                 case AudioShader.HapticFeedbackType.Selection:
                     HapticManager.Selection();
