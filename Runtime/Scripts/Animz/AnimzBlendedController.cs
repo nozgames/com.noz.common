@@ -60,6 +60,8 @@ namespace NoZ.Animz
         private Blend[] _blends = null;
         private ScriptPlayable<Blender> _blender;
 
+        public event AnimationEventDelegate onEvent = null;
+
         private void Awake()
         {
             if (null == _animator)
@@ -311,7 +313,10 @@ namespace NoZ.Animz
             {
                 ref var evt = ref blend.events[eventIndex];
                 if (normalizedTime >= evt.time && blend.eventTime < evt.time)
-                    blend.onEvent(evt.raise);
+                {
+                    blend.onEvent?.Invoke(evt.raise);
+                    onEvent?.Invoke(evt.raise);
+                }
             }
 
             blend.eventTime = normalizedTime;
