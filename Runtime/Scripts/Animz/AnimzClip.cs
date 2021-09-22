@@ -24,7 +24,9 @@ namespace NoZ.Animz
         public AnimationClip clip => _clip;
         public float speed => _speed;
         public float blendTime => _blendTime;
-        
+        public bool isLooping => clip.isLooping;
+        public float length => clip.length;
+
         internal AnimzEventFrame[] events => _events;
     }
 }
