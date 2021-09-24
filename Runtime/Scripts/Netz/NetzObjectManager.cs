@@ -11,7 +11,9 @@ namespace NoZ.Netz
     /// </summary>
     public static class NetzObjectManager
     {
-        private static readonly Dictionary<ulong, NetzObject> _objects = new Dictionary<ulong, NetzObject>();
+        internal static readonly Dictionary<ulong, NetzObject> _objects = new Dictionary<ulong, NetzObject>();
+
+        internal static readonly List<NetzObject> _dirtyObjects = new List<NetzObject>(128);
 
         public static bool TryGetObject (ulong networkInstanceId, out NetzObject obj) =>
             _objects.TryGetValue(networkInstanceId, out obj);
@@ -22,6 +24,15 @@ namespace NoZ.Netz
             {
                 _objects.Add(obj.networkInstanceId, obj);
             }
+        }
+
+        internal static void SetDirty (NetzObject obj)
+        {
+            if (obj.isDirty)
+                return;
+
+            obj.isDirty = true;
+            _dirtyObjects.Add(obj);
         }
     }
 }

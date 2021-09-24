@@ -4,22 +4,21 @@ using UnityEngine;
 using UnityEngine.Assertions;
 using Unity.Collections;
 using Unity.Networking.Transport;
+using Unity.Networking.Transport.Utilities;
 
 namespace NoZ.Netz
 {
     public unsafe class NetzManager : Singleton<NetzManager>
     {
-        /// <summary>
-        /// Message sent by clients periodically to keep the connection alive
-        /// </summary>
-        internal static readonly FourCC KeepAliveMessage = new FourCC('K', 'E', 'E', 'P');
-
-
         private const float KeepAliveDuration = 1.0f;
+
+        // TODO: reliable pipeline
 
         private NativeList<NetzClient> _clients;
         private NetworkDriver _serverDriver;
+        private NetworkPipeline _serverReliablePipeline;
         private NetworkDriver _clientDriver;
+        private NetworkPipeline _clientReliablePipeline;
         private NetzClient _localClient;
         private float _nextKeepAlive;        
 
@@ -62,7 +61,8 @@ namespace NoZ.Netz
 
         private void StartServerInternal ()
         {
-            _serverDriver = NetworkDriver.Create();
+            _serverDriver = NetworkDriver.Create(new ReliableUtility.Parameters { WindowSize = 32 });
+            _serverReliablePipeline = _serverDriver.CreatePipeline(typeof(ReliableSequencedPipelineStage));
 
             var endpoint = NetworkEndPoint.AnyIpv4;
             endpoint.Port = 9000;
@@ -93,6 +93,7 @@ namespace NoZ.Netz
         public void StartClientInternal ()
         {
             _clientDriver = NetworkDriver.Create();
+            _clientReliablePipeline = _clientDriver.CreatePipeline(typeof(ReliableSequencedPipelineStage));
 
             var endpoint = NetworkEndPoint.LoopbackIpv4;
             endpoint.Port = 9000;
@@ -122,7 +123,7 @@ namespace NoZ.Netz
             _nextKeepAlive -= Time.deltaTime;
             if (_nextKeepAlive < 0.0f)
             {
-                NetzMessage.Send(null, KeepAliveMessage, NetzMessageRouting.Server);
+                NetzMessage.Send(null, NetzGlobalMessages.KeepAlive, NetzMessageRouting.Server);
                 _nextKeepAlive = KeepAliveDuration;
             }
 
@@ -166,6 +167,9 @@ namespace NoZ.Netz
             while ((c = _serverDriver.Accept()) != default(NetworkConnection))
             {
                 _clients.Add(new NetzClient(c) { _connected = true });
+
+                // TODO: assign an identifier to the client
+                // TODO: send the client connected message to all clients
             }
 
             // Read incoming data from all clients
@@ -187,6 +191,18 @@ namespace NoZ.Netz
                         _clients[i] = default(NetzClient);
                     }
                 }
+            }
+
+            // Send any new snapshot for all dirty objects
+            for(int i=NetzObjectManager._dirtyObjects.Count - 1; i>=0; i--)
+            {
+                // Clear dirty state
+                var obj = NetzObjectManager._dirtyObjects[i];
+                obj.isDirty = false;
+                NetzObjectManager._dirtyObjects.RemoveAt(i);
+
+                // Send snapshot to all clients
+                using (obj.BuildSnapshot());
             }
         }
 
@@ -210,7 +226,7 @@ namespace NoZ.Netz
 
         internal void SendToServer (byte* bytes, int length)
         {
-            _clientDriver.BeginSend(_localClient.connection, out var clientWriter);
+            _clientDriver.BeginSend(_clientReliablePipeline, _localClient.connection, out var clientWriter);
             clientWriter.WriteBytes(bytes, length);
             _clientDriver.EndSend(clientWriter);
 
@@ -228,7 +244,7 @@ namespace NoZ.Netz
                 if (!client.isConnected)
                     continue;
 
-                _serverDriver.BeginSend(client.connection, out var clientWriter);
+                _serverDriver.BeginSend(_serverReliablePipeline, client.connection, out var clientWriter);
                 clientWriter.WriteBytes(bytes, length);
                 _serverDriver.EndSend(clientWriter);
             }

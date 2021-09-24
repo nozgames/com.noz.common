@@ -53,6 +53,8 @@ namespace NoZ.Netz
         private PooledDataStreamWriter _writer;
         private NetzMessageRouting _routing;
 
+        public DataStreamWriter writer => _writer.writer;
+
         /// <summary>
         /// Send a message with no accompanying data
         /// </summary>
