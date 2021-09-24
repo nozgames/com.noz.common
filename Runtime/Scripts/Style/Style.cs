@@ -342,9 +342,11 @@ namespace NoZ.Style
 
         static Style ()
         {
+#if UNITY_EDITOR
             // Register state providers
             RegisterStateProvider<SelectableStateProvider, UnityEngine.UI.Selectable>();
             RegisterStateProvider<ToggleStateProvider, UnityEngine.UI.Toggle>();
+#endif
 
             // Property types
             RegisterPropertyType((s) => float.TryParse(s, out var value) ? value : 0.0f);

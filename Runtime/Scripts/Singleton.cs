@@ -2,7 +2,14 @@ using UnityEngine;
 
 namespace NoZ
 {
-    public class Singleton<T> : MonoBehaviour where T : class
+    public abstract class Singleton : MonoBehaviour
+    {
+        public abstract void Initialize();
+
+        public abstract void Shutdown();
+    }
+
+    public abstract class Singleton<T> : Singleton where T : class
     {
         private static T _instance = null;
 
@@ -18,9 +25,9 @@ namespace NoZ
             _instance = null;
         }
 
-        public static void Initialize() => (_instance as Singleton<T>).OnInitialize();
+        public override void Initialize() => (_instance as Singleton<T>).OnInitialize();
 
-        public static void Shutdown() => (_instance as Singleton<T>).OnShutdown();
+        public override void Shutdown() => (_instance as Singleton<T>).OnShutdown();
 
         protected virtual void OnInitialize() { }
 

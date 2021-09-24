@@ -4,6 +4,7 @@ using UnityEngine.UI;
 
 namespace NoZ.Style
 {
+#if UNITY_EDITOR
     public class ToggleStateProvider : SelectableStateProvider
     {
         protected internal override void Attach(Component component)
@@ -42,4 +43,5 @@ namespace NoZ.Style
             return state;
         }
     }
+#endif
 }

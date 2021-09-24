@@ -1,8 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
-using UnityEditor.Animations;
 
+#if UNITY_EDITOR
+using UnityEditor.Animations;
 namespace NoZ.Style
 {
     public class SelectableStateProvider : StateProvider, ISelectHandler, IDeselectHandler
@@ -124,3 +125,4 @@ namespace NoZ.Style
         protected virtual void OnDisable() { }
     }
 }
+#endif

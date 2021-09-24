@@ -1,0 +1,32 @@
+{
+    "name": "NoZ.Common.Editor",
+    "rootNamespace": "",
+    "references": [
+        "Unity.VisualStudio.Editor",
+        "NoZ.Common",
+        "Unity.Collections",
+        "Unity.Networking.Transport"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.collections",
+            "expression": "",
+            "define": "UNITY_COLLECTIONS"
+        },
+        {
+            "name": "com.unity.transport",
+            "expression": "",
+            "define": "UNITY_TRANSPORT"
+        }
+    ],
+    "noEngineReferences": false
+}
