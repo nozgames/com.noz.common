@@ -12,7 +12,7 @@ namespace NoZ.Netz
     /// <summary>
     /// Represents a networkable object
     /// </summary>
-    public class NetzObject : MonoBehaviour
+    public abstract class NetzObject : MonoBehaviour
     {
         [SerializeField] internal ulong _networkInstanceId = 0;
 
@@ -20,28 +20,25 @@ namespace NoZ.Netz
 
         public bool isDirty { get; internal set; }
 
-        public bool isClient => NetzManager.instance.IsClient;
-        public bool isServer => NetzManager.instance.IsServer;
+        public bool isClient => NetzManager.instance.isClient;
+        public bool isServer => NetzManager.instance.isServer;
 
         public ulong OwnerClientId { get; private set; }
-
-        public event Action<FourCC, DataStreamReader> onNetworkMessage;
 
         /// <summary>
         /// Handle an incoming message sent to this object
         /// </summary>
         /// <param name="messageId">Message identifier</param>
         /// <param name="reader">Stream reader containing the data</param>
-        internal void HandleMessage (FourCC messageId, DataStreamReader reader)
+        internal void HandleMessage (FourCC messageId, ref DataStreamReader reader)
         {
-            // Snapshot?
             if(messageId == NetzGlobalMessages.Snapshot)
             {
-                HandleSnapshot(reader);
-                return;
+                Debug.Log("Snapshot?");
+                ReadSnapshot(ref reader);
             }
 
-            onNetworkMessage?.Invoke(messageId, reader);
+            //onNetworkMessage?.Invoke(messageId, reader);
         }
 
         /// <summary>
@@ -49,20 +46,17 @@ namespace NoZ.Netz
         /// </summary>
         public void SetDirty() => NetzObjectManager.SetDirty(this);
 
-        public NetzMessage BuildSnapshot ()
-        {
-            var msg = NetzMessage.BeginSend(this, NetzGlobalMessages.Snapshot, NetzMessageRouting.Client);
-            BuildSnapshot(ref msg);
-            return msg;
-        }
+        /// <summary>
+        /// Write the objects snapshot to the given stream
+        /// </summary>
+        /// <param name="writer">Stream to write to</param>
+        protected internal abstract void WriteSnapshot(ref DataStreamWriter writer);
 
-        protected virtual void BuildSnapshot (ref NetzMessage writer)
-        {
-        }
-
-        public virtual void HandleSnapshot(DataStreamReader reader)
-        {
-        }
+        /// <summary>
+        /// Read the object's snapshot from the given stream
+        /// </summary>
+        /// <param name="reader">Stream to read from</param>
+        protected internal abstract void ReadSnapshot(ref DataStreamReader reader);
     }
 }
 

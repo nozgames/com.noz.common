@@ -1,7 +1,14 @@
+#if UNITY_COLLECTIONS && UNITY_TRANSPORT
+
 namespace NoZ.Netz
 {
     internal static class NetzGlobalMessages 
     {
+        /// <summary>
+        /// Connection message
+        /// </summary>
+        public static readonly FourCC Connect = new FourCC('C', 'O', 'N', 'N');
+
         /// <summary>
         /// Message sent by clients periodically to keep the connection alive
         /// </summary>
@@ -23,3 +30,5 @@ namespace NoZ.Netz
         public static readonly FourCC Snapshot = new FourCC('S', 'N', 'A', 'P');
     }
 }
+
+#endif
