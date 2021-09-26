@@ -24,9 +24,11 @@ namespace NoZ.Netz
 
         public uint localClientId => _client?.id ?? 0;
 
-        public event Action onServerStarted;
+        public event ServerStartedEvent onServerStarted;
 
-        public event Action onServerStopped;
+        public event ServerStoppedEvent onServerStopped;
+
+        public event ClientStateChangeEvent onClientStateChanged;
 
         protected override void OnInitialize()
         {
@@ -129,6 +131,11 @@ namespace NoZ.Netz
 
             if(_client != null)
                 _client.Update();
+        }
+
+        internal void RaiseClientStateChanged (uint clientId, NetzClientState oldState, NetzClientState newState)
+        {
+            onClientStateChanged?.Invoke(clientId, oldState, newState);
         }
     }
 }

@@ -246,7 +246,7 @@ namespace NoZ
             // Read the message FourCC
             var messageId = new FourCC(reader.ReadUInt());
 
-            if(messageId == NetzGlobalMessages.Connect)
+            if(messageId == NetzConstants.Messages.Connect)
             {
                 client.id = reader.ReadUInt();
                 client.connected = true;
@@ -254,7 +254,7 @@ namespace NoZ
                 return;
             }
 
-            if (messageId != NetzGlobalMessages.Debug)
+            if (messageId != NetzConstants.Messages.Debug)
                 return;
 
             var count = (int)reader.ReadUShort();
@@ -264,7 +264,7 @@ namespace NoZ
                 {
                     from = reader.ReadUInt(),
                     to = reader.ReadUInt(),
-                    id = new FourCC(reader.ReadUInt()),
+                    id = reader.ReadFourCC(),
                     received = reader.ReadByte() == 1,
                     length = reader.ReadUShort(),
                     time = DateTime.Now.Ticks

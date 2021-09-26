@@ -64,8 +64,8 @@ namespace NoZ.Netz
         /// Create a new message.  Note that this message must be disposed or it will leak
         /// </summary>
         /// <param name="target">Target object</param>
-        /// <param name="messageId">Message identifier</param>
-        public static NetzMessage Create (NetzObject target, FourCC messageId)
+        /// <param name="messageType">Message identifier</param>
+        public static NetzMessage Create (NetzObject target, FourCC messageType)
         {
             var message = new NetzMessage();
             if (_pooledBuffers.Count > 0)
@@ -79,10 +79,10 @@ namespace NoZ.Netz
             // Write the message header
             var writer = message.BeginWrite();
             writer.WriteULong(target != null ? target.networkInstanceId : 0);
-            writer.WriteUInt(messageId.value);
+            writer.WriteFourCC(messageType);
             message.EndWrite(writer);
 
-            message.id = messageId;
+            message.id = messageType;
 
             return message;
         }

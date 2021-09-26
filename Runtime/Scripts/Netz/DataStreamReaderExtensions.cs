@@ -18,6 +18,8 @@ namespace NoZ.Netz
             transform.position = reader.ReadVector3();
             transform.rotation = reader.ReadQuaternion();
         }
+
+        public static FourCC ReadFourCC(this ref DataStreamReader reader) => new FourCC(reader.ReadUInt());
     }
 }
 

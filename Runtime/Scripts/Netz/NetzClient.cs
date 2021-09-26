@@ -3,6 +3,7 @@
 using UnityEngine;
 using Unity.Networking.Transport;
 using System;
+using System.Collections.Generic;
 
 namespace NoZ.Netz
 {
@@ -10,11 +11,19 @@ namespace NoZ.Netz
     {
         private const float KeepAliveDuration = 10.0f;
 
+        private class ConnectedClient
+        {
+            public uint id;
+            public NetzClientState oldState;
+            public NetzClientState state;
+        }
+
         private NetworkConnection _connection;
         private NetworkDriver _driver;
         private NetworkPipeline _reliablePipeline;
         private float _nextKeepAlive;
         private NetzMessageRouter<NetzClient> _router;
+        private Dictionary<uint, ConnectedClient> _connectedClients = new Dictionary<uint, ConnectedClient>();
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         private NetzDebuggerClient _debugger;
@@ -57,8 +66,9 @@ namespace NoZ.Netz
             state = NetzClientState.Connecting;
 
             _router = new NetzMessageRouter<NetzClient>();
-            _router.AddRoute(NetzGlobalMessages.Connect, OnConnectMessage);
-            _router.AddRoute(NetzGlobalMessages.Spawn, OnSpawnMessage);
+            _router.AddRoute(NetzConstants.Messages.Connect, OnConnectMessage);
+            _router.AddRoute(NetzConstants.Messages.Spawn, OnSpawnMessage);
+            _router.AddRoute(NetzConstants.Messages.ClientStates, OnClientStates);
         }
 
         public static NetzClient Connect (NetworkEndPoint endpoint)
@@ -114,7 +124,7 @@ namespace NoZ.Netz
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             // Ignore connect message for debugger becuase it will send to the debugger itself
-            if(messageId != NetzGlobalMessages.Connect)
+            if(messageId != NetzConstants.Messages.Connect)
                 SendToDebugger(messageId, received: true, length: reader.Length);
 #endif
 
@@ -153,7 +163,7 @@ namespace NoZ.Netz
             SendToDebugger(messageId, received: true, length: reader.Length);
 #endif
 
-            using (var message = NetzMessage.Create(null, NetzGlobalMessages.Connect))
+            using (var message = NetzMessage.Create(null, NetzConstants.Messages.Connect))
             {
                 var writer = message.BeginWrite();
                 writer.WriteUInt(id);
@@ -178,6 +188,38 @@ namespace NoZ.Netz
         }
 
         /// <summary>
+        /// Handles incoming client state changes
+        /// </summary>
+        private void OnClientStates(FourCC messageId, NetzClient target, ref DataStreamReader reader)
+        {
+            // First mark all connected clients as disconnected assuming their state will be updated
+            // in the loop below
+            foreach(var connectedClient in _connectedClients.Values)
+                connectedClient.state = NetzClientState.Disconnected;
+
+            var count = (int)reader.ReadByte();
+            for(var clientIndex=0; clientIndex<count; clientIndex++)
+            {
+                var clientId = reader.ReadUInt();
+                var state = (NetzClientState)reader.ReadByte();
+
+                if (!_connectedClients.TryGetValue(clientId, out var connectedClient))
+                    _connectedClients.Add(clientId, new ConnectedClient { id = clientId, oldState = NetzClientState.Unknown, state = state });
+                else
+                    connectedClient.state = state;
+            }
+
+            // Send events for any state changes
+            foreach (var connectedClient in _connectedClients.Values)
+                if(connectedClient.oldState != connectedClient.state)
+                {
+                    var oldState = connectedClient.oldState;
+                    connectedClient.oldState = connectedClient.state;
+                    NetzManager.instance.RaiseClientStateChanged(connectedClient.id, oldState, connectedClient.state);                    
+                }
+        }
+
+        /// <summary>
         /// Send a keep alive message to the server to ensure that the connection isnt closed.
         /// </summary>
         private void SendKeepAlive ()
@@ -189,7 +231,7 @@ namespace NoZ.Netz
             if (_nextKeepAlive > 0.0f)
                 return;
 
-            using (var message = NetzMessage.Create(null, NetzGlobalMessages.KeepAlive))
+            using (var message = NetzMessage.Create(null, NetzConstants.Messages.KeepAlive))
                 SendToServer(message);
         }
 

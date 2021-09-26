@@ -11,9 +11,7 @@ namespace NoZ.Netz
     /// </summary>
     public static class NetzObjectManager
     {
-        internal const ulong FirstSpawnedObjectInstanceId = 1 << 24;
-
-        internal static ulong _nextSpawnedObjectInstanceId = FirstSpawnedObjectInstanceId;
+        internal static ulong _nextSpawnedObjectInstanceId = NetzConstants.SpawnedObjectInstanceId;
 
         internal static readonly Dictionary<ulong, NetzObject> _objects = new Dictionary<ulong, NetzObject>();
 
@@ -30,12 +28,31 @@ namespace NoZ.Netz
             }
         }
 
+        public static T SpawnCustom<T> (ulong networkInstanceId, Transform parent) where T : NetzObject
+        {
+            if ((networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) != NetzConstants.CustomNetworkInstanceId)
+                throw new System.InvalidOperationException("Networking InstanceId must be a custom network instance id");
+
+            if(_objects.ContainsKey(networkInstanceId))
+                throw new System.InvalidOperationException("Custom network instance identifier is already in use");
+
+            var gameObject = new GameObject();
+            gameObject.transform.SetParent(parent);
+            var t = gameObject.AddComponent<T>();
+            t._networkInstanceId = networkInstanceId;
+            t.state = NetzObjectState.Spawned;
+
+            _objects.Add(networkInstanceId, t);
+
+            return t;
+        }
+
         /// <summary>
         /// Spawn a network object 
         /// </summary>
         /// <param name="prefab"></param>
         /// <param name="parent"></param>
-        public static void Spawn (NetzObject prefab, NetzObject parent)
+        public static void Spawn (NetzObject prefab, NetzObject parent, uint ownerClientId)
         {
             // TODO: if this is the client we have to send a message to the server to spawn the object
             if (!NetzManager.instance.isServer)

@@ -76,7 +76,7 @@ namespace NoZ.Netz
                     _connected = true;
 
                     _driver.BeginSend(_pipeline, _connection, out var clientWriter);
-                    clientWriter.WriteUInt(NetzGlobalMessages.Connect.value);
+                    clientWriter.WriteFourCC(NetzConstants.Messages.Connect);
                     clientWriter.WriteUInt(_id);
                     _driver.EndSend(clientWriter);
                 }
@@ -100,7 +100,7 @@ namespace NoZ.Netz
                 var count = Mathf.Min(_queue.Count, MaxMessagesPerSend);
 
                 _driver.BeginSend(_pipeline, _connection, out var clientWriter);
-                clientWriter.WriteUInt(NetzGlobalMessages.Debug.value);
+                clientWriter.WriteFourCC(NetzConstants.Messages.Debug);
                 clientWriter.WriteUShort((ushort)count);
                 for (int i=0; i<count; i++)
                 {
@@ -131,7 +131,7 @@ namespace NoZ.Netz
         private void SendKeepAlive ()
         {
             _driver.BeginSend(_pipeline, _connection, out var clientWriter);
-            clientWriter.WriteUInt(NetzGlobalMessages.KeepAlive.value);
+            clientWriter.WriteFourCC(NetzConstants.Messages.KeepAlive);
             _driver.EndSend(clientWriter);
 
             _nextKeepAlive = KeepAliveDuration;

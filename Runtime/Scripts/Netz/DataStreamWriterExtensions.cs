@@ -27,6 +27,11 @@ namespace NoZ.Netz
             writer.WriteVector3(transform.position);
             writer.WriteQuaternion(transform.rotation);
         }
+
+        public static void WriteFourCC (this ref DataStreamWriter writer, FourCC fourcc)
+        {
+            writer.WriteUInt(fourcc);
+        }
     }
 }
 

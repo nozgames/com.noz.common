@@ -30,6 +30,8 @@ namespace NoZ
 
         public override bool Equals(object obj) => this.Equals((FourCC)obj);
 
+        public static implicit operator uint (FourCC v) => v.value;
+
         public override int GetHashCode() => (int)value;
     }
 }

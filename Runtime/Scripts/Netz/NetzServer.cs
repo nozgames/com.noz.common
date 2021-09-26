@@ -31,9 +31,24 @@ namespace NoZ.Netz
         private float _snapshotInterval = 1.0f / 20.0f;
         private float _snapshotElapsed = 0.0f;
 
+        /// <summary>
+        /// Identifier of the current snapshot
+        /// </summary>
+        private uint _snapshotId = 1;
+
+        /// <summary>
+        /// Snapshot the client state was last changed in
+        /// </summary>
+        private bool _clientStateDirty;
+
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         private NetzDebuggerClient _debugger;
 #endif
+
+        /// <summary>
+        /// Event raised when a clients state changes
+        /// </summary>
+        public event ClientStateChangeEvent onClientStateChanged;
 
         /// <summary>
         /// Number of clients connected to the server
@@ -46,7 +61,7 @@ namespace NoZ.Netz
             _driver = NetworkDriver.Create(new ReliableUtility.Parameters { WindowSize = 32 });
             _pipeline = _driver.CreatePipeline(typeof(ReliableSequencedPipelineStage));
 
-            _router.AddRoute(NetzGlobalMessages.Connect, OnClientConnectAck);
+            _router.AddRoute(NetzConstants.Messages.Connect, OnClientConnectAck);
         }
 
         public void Dispose()
@@ -112,7 +127,7 @@ namespace NoZ.Netz
                 _clients.Add(client);
 
                 // Send a connect message to the client to assign it an identifier
-                using (var message = NetzMessage.Create(null, NetzGlobalMessages.Connect))
+                using (var message = NetzMessage.Create(null, NetzConstants.Messages.Connect))
                 {
                     var writer = message.BeginWrite();
                     writer.WriteUInt(client.id);
@@ -170,7 +185,7 @@ namespace NoZ.Netz
                 // If the object is spawning we first need to send a spawn message before we send the snapshow
                 if(state == NetzObjectState.Spawning)
                 {
-                    using (var message = NetzMessage.Create(null, NetzGlobalMessages.Spawn))
+                    using (var message = NetzMessage.Create(null, NetzConstants.Messages.Spawn))
                     {
                         var writer = message.BeginWrite();
                         writer.WriteULong(netobj.prefabHash);
@@ -183,7 +198,7 @@ namespace NoZ.Netz
                     }
                 }
 
-                using (var message = NetzMessage.Create(netobj, NetzGlobalMessages.Snapshot))
+                using (var message = NetzMessage.Create(netobj, NetzConstants.Messages.Snapshot))
                 {
                     var writer = message.BeginWrite();
                     netobj.WriteSnapshot(ref writer);
@@ -208,7 +223,7 @@ namespace NoZ.Netz
 
                     if(!netobj.isSceneObject)
                     {
-                        using (var message = NetzMessage.Create(null, NetzGlobalMessages.Spawn))
+                        using (var message = NetzMessage.Create(null, NetzConstants.Messages.Spawn))
                         {
                             var writer = message.BeginWrite();
                             writer.WriteULong(netobj.prefabHash);
@@ -221,7 +236,7 @@ namespace NoZ.Netz
                         }
                     }
 
-                    using (var message = NetzMessage.Create(netobj, NetzGlobalMessages.Snapshot))
+                    using (var message = NetzMessage.Create(netobj, NetzConstants.Messages.Snapshot))
                     {
                         var writer = message.BeginWrite();
                         netobj.WriteSnapshot(ref writer);
@@ -231,9 +246,21 @@ namespace NoZ.Netz
                     }
                 }
 
-                client.state = NetzClientState.Connected;
+                SetClientState(client, NetzClientState.Connected);
             }
 #endif
+
+            // Update any client states
+            SendClientStates();
+        }
+
+        private void SetClientState (ConnectedClient client, NetzClientState state)
+        {
+            if (client.state == state)
+                return;
+
+            client.state = state;
+            _clientStateDirty = true;
         }
 
         private void SendToClient(ConnectedClient client, NetzMessage message)
@@ -304,11 +331,37 @@ namespace NoZ.Netz
             // Is this client the host?
             client.isHost = client.id == NetzManager.instance.localClientId && NetzManager.instance.isServer;
 
-            if (client.isHost)
-                client.state = NetzClientState.Connected;
-            else
-                client.state = NetzClientState.Synchronizing;
+            SetClientState(client, client.isHost ? NetzClientState.Connected : NetzClientState.Synchronizing);
         }
+
+        /// <summary>
+        /// Send the client states of all clients to the given client or all clients if no client is specified.
+        /// </summary>
+        /// <param name="client">Optional client to send to</param>
+        private void SendClientStates (ConnectedClient client=null, bool force=false)
+        {
+            if (!force && !_clientStateDirty)
+                return;
+
+            using(var message = NetzMessage.Create(null, NetzConstants.Messages.ClientStates))
+            {
+                var writer = message.BeginWrite();
+                writer.WriteByte((byte)_clients.Count);
+                for (int clientIndex = 0; clientIndex < _clients.Count; clientIndex++)
+                {
+                    var clientOut = _clients[clientIndex];
+                    writer.WriteUInt(clientOut.id);
+                    writer.WriteByte((byte)clientOut.state);
+                }
+                message.EndWrite(writer);
+
+                if (client == null)
+                    SendToAllClients(message);
+                else
+                    SendToClient(client, message);
+            }
+        }
+
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         private void SendToDebugger(ConnectedClient client, FourCC messageId, int length, bool received)

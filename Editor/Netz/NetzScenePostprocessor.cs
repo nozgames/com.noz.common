@@ -34,7 +34,7 @@ namespace NoZ.Netz.Editor
         [PostProcessScene(int.MaxValue)]
         public static void ProcessScene()
         {
-            ulong nextId = 1;
+            ulong nextId = NetzConstants.SceneObjectInstanceId;
 
             _builder = new StringBuilder();
             foreach(var ctx in Object.FindObjectsOfType<NetzObject>().Select(o => new SortContext(o)).OrderBy(c => c.id))

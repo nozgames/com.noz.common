@@ -65,9 +65,14 @@ namespace NoZ.Netz
 
         public bool isClient => NetzManager.instance.isClient;
         public bool isServer => NetzManager.instance.isServer;
-        public bool isSceneObject => _networkInstanceId < FirstSpawnedObjectInstanceId;
+        public bool isSceneObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == 0;
+        public bool isCustomObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == NetzConstants.CustomNetworkInstanceId;
+        public bool isSpawnedObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == NetzConstants.SpawnedObjectInstanceId;
 
-        public ulong OwnerClientId { get; private set; }
+        /// <summary>
+        /// Identifier of the client that owns this object
+        /// </summary>
+        public uint ownerClientId { get; private set; }
 
         /// <summary>
         /// Generate the object's prefab hash
@@ -86,7 +91,7 @@ namespace NoZ.Netz
         /// <param name="reader">Stream reader containing the data</param>
         internal void HandleMessage (FourCC messageId, ref DataStreamReader reader)
         {
-            if(messageId == NetzGlobalMessages.Snapshot)
+            if(messageId == NetzConstants.Messages.Snapshot)
             {
                 ReadSnapshot(ref reader);
                 return;
