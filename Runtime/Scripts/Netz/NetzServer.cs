@@ -16,6 +16,7 @@ namespace NoZ.Netz
         private class ConnectedClient
         {
             public NetworkConnection connection;
+            public NetzClientState oldState;
             public NetzClientState state;
             public int lastSnapshotSent;
             public int lastSnapshotReceived;
@@ -62,6 +63,7 @@ namespace NoZ.Netz
             _pipeline = _driver.CreatePipeline(typeof(ReliableSequencedPipelineStage));
 
             _router.AddRoute(NetzConstants.Messages.Connect, OnClientConnectAck);
+            _router.AddRoute(NetzConstants.Messages.Disconnect, OnClientDisconnect);
         }
 
         public void Dispose()
@@ -109,7 +111,7 @@ namespace NoZ.Netz
 
             _driver.ScheduleUpdate().Complete();
 
-            // Clean up any disconnected clients
+            // Clean up any clients that have disconnected
             for (int i = 0; i < _clients.Count; i++)
             {
                 if (!_clients[i].connection.IsCreated)
@@ -135,8 +137,6 @@ namespace NoZ.Netz
 
                     SendToClient(client, message);
                 }
-                
-                // TODO: send message to all other clients informing them of the connection
             }
 
             // Read incoming data from all clients
@@ -189,22 +189,41 @@ namespace NoZ.Netz
                     {
                         var writer = message.BeginWrite();
                         writer.WriteULong(netobj.prefabHash);
+                        writer.WriteUInt(netobj.ownerClientId);
                         writer.WriteULong(netobj.networkInstanceId);
                         writer.WriteTransform(netobj.transform);
                         // TODO: parent
                         message.EndWrite(writer);
 
+                        // TODO: add the snapshot to this spawn message instead of sending a separate message
+
                         SendToAllClients(message, includeHost: false);
                     }
                 }
-
-                using (var message = NetzMessage.Create(netobj, NetzConstants.Messages.Snapshot))
+                
+                if (state == NetzObjectState.Despawning)
                 {
-                    var writer = message.BeginWrite();
-                    netobj.WriteSnapshot(ref writer);
-                    message.EndWrite(writer);
+                    using (var message = NetzMessage.Create(null, NetzConstants.Messages.Despawn))
+                    {
+                        var writer = message.BeginWrite();
+                        writer.WriteULong(netobj.networkInstanceId);
+                        message.EndWrite(writer);
 
-                    SendToAllClients(message, includeHost:false);
+                        SendToAllClients(message, includeHost: false);
+                    }
+
+                    UnityEngine.Object.Destroy(netobj.gameObject);
+                }
+                else
+                {
+                    using (var message = NetzMessage.Create(netobj, NetzConstants.Messages.Snapshot))
+                    {
+                        var writer = message.BeginWrite();
+                        netobj.WriteSnapshot(ref writer);
+                        message.EndWrite(writer);
+
+                        SendToAllClients(message, includeHost: false);
+                    }
                 }
             }
 
@@ -227,6 +246,7 @@ namespace NoZ.Netz
                         {
                             var writer = message.BeginWrite();
                             writer.WriteULong(netobj.prefabHash);
+                            writer.WriteUInt(netobj.ownerClientId);
                             writer.WriteULong(netobj.networkInstanceId);
                             writer.WriteTransform(netobj.transform);
                             // TODO: parent
@@ -252,6 +272,18 @@ namespace NoZ.Netz
 
             // Update any client states
             SendClientStates();
+
+            // Send disconnect messages to any 
+            for (int i = 0; i < _clients.Count; i++)
+            {
+                if (_clients[i].state == NetzClientState.Disconnected)
+                {
+                    using (var message = NetzMessage.Create(null, NetzConstants.Messages.Disconnect))
+                        SendToClient(_clients[i], message);
+
+                    _clients[i].connection = default(NetworkConnection);
+                }
+            }
         }
 
         private void SetClientState (ConnectedClient client, NetzClientState state)
@@ -259,6 +291,7 @@ namespace NoZ.Netz
             if (client.state == state)
                 return;
 
+            client.oldState = client.state;
             client.state = state;
             _clientStateDirty = true;
         }
@@ -323,7 +356,7 @@ namespace NoZ.Netz
         /// <summary>
         /// Handle client connection ack message
         /// </summary>
-        private void OnClientConnectAck(FourCC messageId, ConnectedClient client, ref DataStreamReader reader)
+        private void OnClientConnectAck(FourCC messageType, ConnectedClient client, ref DataStreamReader reader)
         {
             var clientId = reader.ReadUInt();
             UnityEngine.Debug.Assert(client.id == clientId);
@@ -335,6 +368,16 @@ namespace NoZ.Netz
         }
 
         /// <summary>
+        /// Handle notfication from client that they are disconnecting.  This is the graceful way for a client
+        /// to leave a server as it cleans up properly.  
+        /// </summary>
+        private void OnClientDisconnect(FourCC messageType, ConnectedClient client, ref DataStreamReader reader)
+        {
+            // Go straight to disconnected as disconnecting would not mean anything to the server.
+            SetClientState(client, NetzClientState.Disconnected);
+        }
+
+        /// <summary>
         /// Send the client states of all clients to the given client or all clients if no client is specified.
         /// </summary>
         /// <param name="client">Optional client to send to</param>
@@ -342,6 +385,25 @@ namespace NoZ.Netz
         {
             if (!force && !_clientStateDirty)
                 return;
+
+            _clientStateDirty = false;
+
+            // If not a host then the client state needs to be reported here
+            if (!NetzManager.instance.isHost)
+            {
+                for (int clientIndex = 0; clientIndex < _clients.Count; clientIndex++)
+                {
+                    var clientOut = _clients[clientIndex];
+                    if(clientOut.oldState != clientOut.state)
+                    {
+                        var oldState = clientOut.oldState;
+                        clientOut.oldState = clientOut.state;
+                        NetzManager.instance.RaiseClientStateChanged(clientOut.id, oldState, clientOut.state);
+                    }
+                }
+
+                return;
+            }
 
             using(var message = NetzMessage.Create(null, NetzConstants.Messages.ClientStates))
             {

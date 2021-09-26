@@ -52,11 +52,11 @@ namespace NoZ.Netz
         /// </summary>
         /// <param name="prefab"></param>
         /// <param name="parent"></param>
-        public static void Spawn (NetzObject prefab, NetzObject parent, uint ownerClientId)
+        public static NetzObject Spawn (NetzObject prefab, NetzObject parent, uint ownerClientId)
         {
             // TODO: if this is the client we have to send a message to the server to spawn the object
             if (!NetzManager.instance.isServer)
-                return;
+                return null;
 
             // Instantiate the actual game object
             var go = Object.Instantiate(prefab.gameObject, parent == null ? null : parent.transform);
@@ -64,30 +64,82 @@ namespace NoZ.Netz
             if(null == netobj)
             {
                 Object.Destroy(go);
-                return;
+                return null;
             }
 
             netobj._networkInstanceId = _nextSpawnedObjectInstanceId++;
             netobj.prefabHash = prefab.prefabHash;
             netobj.state = NetzObjectState.Spawning;
+            netobj.ownerClientId = ownerClientId;
 
             // Track the object
             _objects.Add(netobj._networkInstanceId, netobj);
+
+            netobj.NetworkStart();
+
+            return netobj;
         }
 
-        internal static NetzObject SpawnOnClient (ulong prefabHash, ulong networkInstanceId)
+        internal static NetzObject SpawnOnClient(ulong prefabHash, uint ownerClientId, ulong networkInstanceId)
         {
             if (!NetzManager.instance.TryGetPrefab(prefabHash, out var prefab))
+            {
+                Debug.LogError($"Unknown prefab hash `{prefabHash}`.  Make sure the prefab is included in the NetzManager prefab list.");
                 return null;
+            }
 
             // TODO: parent
             var netobj = Object.Instantiate(prefab.gameObject).GetComponent<NetzObject>();
             netobj._networkInstanceId = networkInstanceId;
+            netobj.ownerClientId = ownerClientId;
 
             // Track the object
             _objects.Add(netobj._networkInstanceId, netobj);
 
+            netobj.NetworkStart();
+
             return netobj;
+        }
+
+        /// <summary>
+        /// Despawn an object from the server and al clients
+        /// </summary>
+        /// <param name=""></param>
+        /// <param name=""></param>
+        public static void Despawn (NetzObject netobj)
+        {
+            // Despawn must be called on the server
+            if (!NetzManager.instance.isServer)
+                return;
+
+            // Mark the object as despawned
+            netobj.state = NetzObjectState.Despawning;
+
+            // Add to the dirty list to make sure the object gets despawned
+            if (netobj._dirtyNode.List == null)
+                _dirtyObjects.AddLast(netobj._dirtyNode);
+
+            // Remove from the tracked object list
+            _objects.Remove(netobj.networkInstanceId);
+
+            // Disable the object so it does not think until it can be despawned
+            netobj.gameObject.SetActive(false);
+        }
+
+        internal static void DespawnOnClient (ulong networkInstanceId)
+        {
+            if (NetzManager.instance.isClient && !NetzManager.instance.isHost)
+                return;
+
+            if (!TryGetObject(networkInstanceId, out var netobj))
+                return;
+
+            if(netobj._dirtyNode.List != null)
+                _dirtyObjects.Remove(netobj._dirtyNode);
+
+            _objects.Remove(networkInstanceId);
+
+            Object.Destroy(netobj.gameObject);
         }
     }
 }

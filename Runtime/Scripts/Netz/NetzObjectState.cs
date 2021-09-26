@@ -9,7 +9,8 @@ namespace NoZ.Netz
         Unknown,
         Spawning,
         Spawned,
-        Dirty
+        Dirty,
+        Despawning
     }
 }
 

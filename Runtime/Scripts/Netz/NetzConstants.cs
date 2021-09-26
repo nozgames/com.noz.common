@@ -33,19 +33,14 @@ namespace NoZ.Netz
             public static readonly FourCC Connect = new FourCC('C', 'O', 'N', 'N');
 
             /// <summary>
+            /// Disconnect message
+            /// </summary>
+            public static readonly FourCC Disconnect = new FourCC('D', 'C', 'O', 'N');
+
+            /// <summary>
             /// Message sent by clients periodically to keep the connection alive
             /// </summary>
             public static readonly FourCC KeepAlive = new FourCC('K', 'E', 'E', 'P');
-
-            /// <summary>
-            /// Message sent to clients when a new client connects to the server
-            /// </summary>
-            public static readonly FourCC ClientConnected = new FourCC('C', 'L', 'C', ' ');
-
-            /// <summary>
-            /// Message sent to clients when a new client disconnects from the server
-            /// </summary>
-            public static readonly FourCC ClientDisconnected = new FourCC('C', 'L', 'D', ' ');
 
             /// <summary>
             /// Object snapshot
@@ -56,6 +51,13 @@ namespace NoZ.Netz
             /// Send to spawn an object on the clients
             /// </summary>
             public static readonly FourCC Spawn = new FourCC('S', 'P', 'W', 'N');
+
+
+            /// <summary>
+            /// Sent to Despawn an object on the client
+            /// </summary>
+            public static readonly FourCC Despawn = new FourCC('D', 'S', 'P', 'N');
+
 
             /// <summary>
             /// Debug message for debugger

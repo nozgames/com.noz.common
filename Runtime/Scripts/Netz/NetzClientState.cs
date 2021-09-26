@@ -8,6 +8,7 @@ namespace NoZ.Netz
         Connecting,
         Synchronizing,
         Connected,
+        Disconnecting,
         Disconnected
     }
 }

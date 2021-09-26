@@ -67,19 +67,25 @@ namespace NoZ.Netz
         {
             base.OnShutdown();
 
-            NetzMessage.Shutdown();
-
             if (_client != null)
             {
                 _client.Dispose();
                 _client = null;
             }
 
-            if(_server != null)
+            if (_server != null)
             {
                 _server.Dispose();
                 _server = null;
             }
+
+            NetzMessage.Shutdown();
+        }
+
+        public void Stop ()
+        {
+            if (_client != null)
+                _client.Disconnect();
         }
 
         public void StartServer ()
@@ -129,8 +135,13 @@ namespace NoZ.Netz
             if (_server != null)
                 _server.Update();
 
-            if(_client != null)
+            if (_client != null)
+            {
                 _client.Update();
+
+                if (_client.state == NetzClientState.Disconnected)
+                    _client = null;
+            }
         }
 
         internal void RaiseClientStateChanged (uint clientId, NetzClientState oldState, NetzClientState newState)

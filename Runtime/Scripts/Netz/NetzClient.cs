@@ -67,7 +67,9 @@ namespace NoZ.Netz
 
             _router = new NetzMessageRouter<NetzClient>();
             _router.AddRoute(NetzConstants.Messages.Connect, OnConnectMessage);
+            _router.AddRoute(NetzConstants.Messages.Disconnect, OnDisconnectMessage);
             _router.AddRoute(NetzConstants.Messages.Spawn, OnSpawnMessage);
+            _router.AddRoute(NetzConstants.Messages.Despawn, OnDespawnMessage);
             _router.AddRoute(NetzConstants.Messages.ClientStates, OnClientStates);
         }
 
@@ -78,8 +80,22 @@ namespace NoZ.Netz
             return client;
         }
 
+        public void Disconnect ()
+        {
+            if(state == NetzClientState.Connecting || state == NetzClientState.Synchronizing)
+            {
+                using (var message = NetzMessage.Create(null, NetzConstants.Messages.Disconnect))
+                    SendToServer(message);
+            }
+
+            state = NetzClientState.Disconnecting;
+        }
+
         internal void Update ()
         {
+            if (!_driver.IsCreated)
+                return;
+
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (_debugger != null)
                 _debugger.Update();
@@ -147,10 +163,16 @@ namespace NoZ.Netz
 #endif
 
             if (_connection.IsCreated)
+            {
                 _connection.Close(_driver);
+                _connection = default(NetworkConnection);
+            }
 
-            if(_driver.IsCreated)
+            if (_driver.IsCreated)
+            {
                 _driver.Dispose();
+                _driver = default(NetworkDriver);
+            }
         }
 
         private void OnConnectMessage (FourCC messageId, NetzClient client, ref DataStreamReader reader)
@@ -173,18 +195,32 @@ namespace NoZ.Netz
             }
         }
 
+        private void OnDisconnectMessage(FourCC messageType, NetzClient target, ref DataStreamReader reader)
+        {
+            Dispose();
+
+            state = NetzClientState.Disconnected;
+        }
+
         /// <summary>
         /// Handles incoming object spawn messages
         /// </summary>
         private void OnSpawnMessage(FourCC messageId, NetzClient target, ref DataStreamReader reader)
         {
             var prefabHash = reader.ReadULong();
+            var ownerClientId = reader.ReadUInt();
             var networkInstanceId = reader.ReadULong();
-            var netzObject = NetzObjectManager.SpawnOnClient(prefabHash, networkInstanceId);
+            var netzObject = NetzObjectManager.SpawnOnClient(prefabHash, ownerClientId:ownerClientId, networkInstanceId:networkInstanceId);
             if (null == netzObject)
                 return;
 
             reader.ReadTransform(netzObject.transform);
+        }
+
+        private void OnDespawnMessage(FourCC messageType, NetzClient target, ref DataStreamReader reader)
+        {
+            var networkInstanceID = reader.ReadULong();
+            NetzObjectManager.DespawnOnClient(networkInstanceID);
         }
 
         /// <summary>

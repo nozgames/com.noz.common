@@ -69,10 +69,12 @@ namespace NoZ.Netz
         public bool isCustomObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == NetzConstants.CustomNetworkInstanceId;
         public bool isSpawnedObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == NetzConstants.SpawnedObjectInstanceId;
 
+        public bool isOwnedByLocalClient => ownerClientId == NetzManager.instance.localClientId;
+
         /// <summary>
         /// Identifier of the client that owns this object
         /// </summary>
-        public uint ownerClientId { get; private set; }
+        public uint ownerClientId { get; internal set; }
 
         /// <summary>
         /// Generate the object's prefab hash
@@ -104,6 +106,11 @@ namespace NoZ.Netz
         /// Marks the object as dirty to ensure its snapshot is rebuilt 
         /// </summary>
         public void SetDirty() => state = NetzObjectState.Dirty;
+
+        /// <summary>
+        /// Start that is run when the object is synchronized on the network
+        /// </summary>
+        protected internal virtual void NetworkStart () { }
 
         /// <summary>
         /// Write the objects snapshot to the given stream
