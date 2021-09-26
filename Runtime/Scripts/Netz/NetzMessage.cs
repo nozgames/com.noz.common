@@ -47,6 +47,8 @@ namespace NoZ.Netz
 
         private PooledBuffer _buffer;
         private bool _writing;
+
+        public FourCC id { get; private set; }
         
         /// <summary>
         /// Return the length of the message in bytes
@@ -79,6 +81,8 @@ namespace NoZ.Netz
             writer.WriteULong(target != null ? target.networkInstanceId : 0);
             writer.WriteUInt(messageId.value);
             message.EndWrite(writer);
+
+            message.id = messageId;
 
             return message;
         }

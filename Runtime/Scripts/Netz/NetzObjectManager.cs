@@ -11,9 +11,13 @@ namespace NoZ.Netz
     /// </summary>
     public static class NetzObjectManager
     {
+        internal const ulong FirstSpawnedObjectInstanceId = 1 << 24;
+
+        internal static ulong _nextSpawnedObjectInstanceId = FirstSpawnedObjectInstanceId;
+
         internal static readonly Dictionary<ulong, NetzObject> _objects = new Dictionary<ulong, NetzObject>();
 
-        internal static readonly List<NetzObject> _dirtyObjects = new List<NetzObject>(128);
+        internal static readonly LinkedList<NetzObject> _dirtyObjects = new LinkedList<NetzObject>();
 
         public static bool TryGetObject (ulong networkInstanceId, out NetzObject obj) =>
             _objects.TryGetValue(networkInstanceId, out obj);
@@ -26,13 +30,41 @@ namespace NoZ.Netz
             }
         }
 
-        internal static void SetDirty (NetzObject obj)
+        /// <summary>
+        /// Spawn a network object 
+        /// </summary>
+        /// <param name="prefab"></param>
+        /// <param name="parent"></param>
+        public static void Spawn (NetzObject prefab, NetzObject parent)
         {
-            if (obj.isDirty)
+            // TODO: if this is the client we have to send a message to the server to spawn the object
+            if (!NetzManager.instance.isServer)
                 return;
 
-            obj.isDirty = true;
-            _dirtyObjects.Add(obj);
+            // Instantiate the actual game object
+            var go = Object.Instantiate(prefab.gameObject, parent == null ? null : parent.transform);
+            var netobj = go.GetComponent<NetzObject>();
+            if(null == netobj)
+            {
+                Object.Destroy(go);
+                return;
+            }
+
+            netobj._networkInstanceId = _nextSpawnedObjectInstanceId++;
+            netobj.prefabHash = prefab.prefabHash;
+            netobj.state = NetzObjectState.Spawning;
+
+            // Track the object
+            _objects.Add(netobj._networkInstanceId, netobj);
+        }
+
+        internal static NetzObject SpawnOnClient (ulong prefabHash)
+        {
+            if (!NetzManager.instance.TryGetPrefab(prefabHash, out var prefab))
+                return null;
+
+            // TODO: parent
+            return Object.Instantiate(prefab.gameObject).GetComponent<NetzObject>();
         }
     }
 }

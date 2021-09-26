@@ -1,5 +1,8 @@
+using System;
+
 namespace NoZ
 {
+    [Serializable]
     public struct FourCC : System.IEquatable<FourCC>
     {
         public uint value;

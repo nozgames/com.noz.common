@@ -28,6 +28,17 @@ namespace NoZ.Netz
         /// Object snapshot
         /// </summary>
         public static readonly FourCC Snapshot = new FourCC('S', 'N', 'A', 'P');
+
+        /// <summary>
+        /// Send to spawn an object on the clients
+        /// </summary>
+        public static readonly FourCC Spawn = new FourCC('S', 'P', 'W', 'N');
+
+        /// <summary>
+        /// Debug message for debugger
+        /// </summary>
+        public static readonly FourCC Debug = new FourCC('D', 'B', 'U', 'G');
+
     }
 }
 
