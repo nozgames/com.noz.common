@@ -24,11 +24,11 @@ namespace NoZ.Netz
         }
 
         private NetworkDriver _driver;
-        private NetworkPipeline _reliablePipeline;
+        private NetworkPipeline _pipeline;
         private List<ConnectedClient> _clients;
         private uint _nextClientId = 1;
         private NetzMessageRouter<ConnectedClient> _router;
-        private float _snapshotInterval = 60.0f / 20.0f;
+        private float _snapshotInterval = 1.0f / 20.0f;
         private float _snapshotElapsed = 0.0f;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -44,7 +44,7 @@ namespace NoZ.Netz
         {
             _clients = new List<ConnectedClient>(16);
             _driver = NetworkDriver.Create(new ReliableUtility.Parameters { WindowSize = 32 });
-            _reliablePipeline = _driver.CreatePipeline(typeof(ReliableSequencedPipelineStage));
+            _pipeline = _driver.CreatePipeline(typeof(ReliableSequencedPipelineStage));
 
             _router.AddRoute(NetzGlobalMessages.Connect, OnClientConnectAck);
         }
@@ -79,6 +79,8 @@ namespace NoZ.Netz
             }
             else
                 server._driver.Listen();
+
+            server._snapshotInterval = 1.0f / NetzManager.instance._updateRate;
 
             return server;
         }
@@ -160,6 +162,11 @@ namespace NoZ.Netz
                 // Set the state back to spanwed which will remove it from the dirty objects list
                 netobj.state = NetzObjectState.Spawned;
 
+                // Do not need to send snapshots to ourself when we are the host, just skip if we are the only client
+                // TODO: we should also skip this when there arent any clients that are fully connected yet.
+                if (_clients.Count == 1 && _clients[0].isHost)
+                    continue;
+
                 // If the object is spawning we first need to send a spawn message before we send the snapshow
                 if(state == NetzObjectState.Spawning)
                 {
@@ -201,7 +208,7 @@ namespace NoZ.Netz
 
                     if(!netobj.isSceneObject)
                     {
-                        using (var message = NetzMessage.Create(netobj, NetzGlobalMessages.Spawn))
+                        using (var message = NetzMessage.Create(null, NetzGlobalMessages.Spawn))
                         {
                             var writer = message.BeginWrite();
                             writer.WriteULong(netobj.prefabHash);
@@ -238,7 +245,7 @@ namespace NoZ.Netz
             SendToDebugger(client, message.id, length:message.length, received: false);
 #endif
 
-            _driver.BeginSend(_reliablePipeline, client.connection, out var clientWriter);
+            _driver.BeginSend(_pipeline, client.connection, out var clientWriter);
             clientWriter.WriteBytes(message.buffer, message.length);
             _driver.EndSend(clientWriter);
         }
@@ -295,7 +302,7 @@ namespace NoZ.Netz
             UnityEngine.Debug.Assert(client.id == clientId);
 
             // Is this client the host?
-            client.isHost = client.id == NetzManager.instance.localClientId;
+            client.isHost = client.id == NetzManager.instance.localClientId && NetzManager.instance.isServer;
 
             if (client.isHost)
                 client.state = NetzClientState.Connected;

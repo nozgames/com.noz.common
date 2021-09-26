@@ -9,6 +9,7 @@ namespace NoZ.Netz
 {
     public unsafe class NetzManager : Singleton<NetzManager>
     {
+        [SerializeField] internal int _updateRate = 20;
         [SerializeField] private NetzObject[] _prefabs = null;
 
         private NetzClient _client;

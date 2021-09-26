@@ -80,37 +80,26 @@ namespace NoZ.Netz
             if (!_connection.IsCreated)
                 return;
 
-            // Make sure we send messages periodically to the server or it will drop us
-            if (state == NetzClientState.Connected)
-            {
-                _nextKeepAlive -= Time.deltaTime;
-                if (_nextKeepAlive < 0.0f)
-                {
-                    using (var message = NetzMessage.Create(null, NetzGlobalMessages.KeepAlive))
-                    {
-                        SendToServer(message);
-                    }
+            SendKeepAlive();
 
-                    _nextKeepAlive = KeepAliveDuration;
-                }
-            }
-
-            DataStreamReader stream;
             NetworkEvent.Type cmd;
-
-            while ((cmd = connection.PopEvent(_driver, out stream)) != NetworkEvent.Type.Empty)
+            while ((cmd = connection.PopEvent(_driver, out var stream)) != NetworkEvent.Type.Empty)
             {
-                if (cmd == NetworkEvent.Type.Connect)
+                switch(cmd)
                 {
-                    // TODO: put us in a "connecting" state?  Need to wait for connect message and initial snapshot sync
-                }
-                else if (cmd == NetworkEvent.Type.Data)
-                {
-                    ReadMessage(stream);
-                }
-                else if (cmd == NetworkEvent.Type.Disconnect)
-                {
-                    _connection = default(NetworkConnection);
+                    case NetworkEvent.Type.Connect:
+                        // TODO: we want to be in the synchronizing state post connect until we 
+                        //       are told we are fully synchronized.
+                        // state = NetzClientState.Synchronizing;
+                        break;
+
+                    case NetworkEvent.Type.Data:
+                        ReadMessage(stream);
+                        break;
+
+                    case NetworkEvent.Type.Disconnect:
+                        _connection = default(NetworkConnection);
+                        break;
                 }
             }
         }
@@ -129,29 +118,12 @@ namespace NoZ.Netz
                 SendToDebugger(messageId, received: true, length: reader.Length);
 #endif
 
-            // No target, global messages
+            // Global messages go through the router
             if (networkInstanceId == 0)
-            {
                 _router.Route(messageId, this, ref reader);
-            }
+            // Messages for objects get routed to the object
             else if (NetzObjectManager.TryGetObject(networkInstanceId, out var obj))
-            {
                 obj.HandleMessage(messageId, ref reader);
-            }
-        }
-
-        internal void SendToServer (NetzMessage message)
-        {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            SendToDebugger(message.id, received: false, length:message.length);
-#endif
-
-            _driver.BeginSend(_reliablePipeline, connection, out var clientWriter);
-            clientWriter.WriteBytes(message.buffer, message.length);
-            _driver.EndSend(clientWriter);
-
-            // Since we sent a message we can reset the keep alive
-            _nextKeepAlive = KeepAliveDuration;
         }
 
         public void Dispose()
@@ -196,12 +168,49 @@ namespace NoZ.Netz
         /// </summary>
         private void OnSpawnMessage(FourCC messageId, NetzClient target, ref DataStreamReader reader)
         {
-            var netzObject = NetzObjectManager.SpawnOnClient(reader.ReadULong());
+            var prefabHash = reader.ReadULong();
+            var networkInstanceId = reader.ReadULong();
+            var netzObject = NetzObjectManager.SpawnOnClient(prefabHash, networkInstanceId);
             if (null == netzObject)
                 return;
 
-            netzObject._networkInstanceId = reader.ReadULong();
             reader.ReadTransform(netzObject.transform);
+        }
+
+        /// <summary>
+        /// Send a keep alive message to the server to ensure that the connection isnt closed.
+        /// </summary>
+        private void SendKeepAlive ()
+        {            
+            if (state != NetzClientState.Connected)
+                return;
+
+            _nextKeepAlive -= Time.deltaTime;
+            if (_nextKeepAlive > 0.0f)
+                return;
+
+            using (var message = NetzMessage.Create(null, NetzGlobalMessages.KeepAlive))
+                SendToServer(message);
+        }
+
+        /// <summary>
+        /// Send the given message to the server
+        /// </summary>
+        /// <param name="message">Message to send</param>
+        internal void SendToServer(NetzMessage message)
+        {
+            // TODO: should we queue messages into a single send?
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            SendToDebugger(message.id, received: false, length: message.length);
+#endif
+
+            _driver.BeginSend(_reliablePipeline, connection, out var clientWriter);
+            clientWriter.WriteBytes(message.buffer, message.length);
+            _driver.EndSend(clientWriter);
+
+            // Since we sent a message we can reset the keep alive
+            _nextKeepAlive = KeepAliveDuration;
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD

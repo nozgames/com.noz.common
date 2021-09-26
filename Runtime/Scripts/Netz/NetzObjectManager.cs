@@ -58,13 +58,19 @@ namespace NoZ.Netz
             _objects.Add(netobj._networkInstanceId, netobj);
         }
 
-        internal static NetzObject SpawnOnClient (ulong prefabHash)
+        internal static NetzObject SpawnOnClient (ulong prefabHash, ulong networkInstanceId)
         {
             if (!NetzManager.instance.TryGetPrefab(prefabHash, out var prefab))
                 return null;
 
             // TODO: parent
-            return Object.Instantiate(prefab.gameObject).GetComponent<NetzObject>();
+            var netobj = Object.Instantiate(prefab.gameObject).GetComponent<NetzObject>();
+            netobj._networkInstanceId = networkInstanceId;
+
+            // Track the object
+            _objects.Add(netobj._networkInstanceId, netobj);
+
+            return netobj;
         }
     }
 }
