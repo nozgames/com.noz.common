@@ -98,8 +98,10 @@ namespace NoZ.Netz
                 ReadSnapshot(ref reader);
                 return;
             }
-            
-            // TODO: optional router
+            else if (messageId == NetzConstants.Messages.Despawn)
+            {
+                NetzObjectManager.DespawnOnClient(networkInstanceId);
+            }
         }
 
         /// <summary>
@@ -111,6 +113,8 @@ namespace NoZ.Netz
         /// Start that is run when the object is synchronized on the network
         /// </summary>
         protected internal virtual void NetworkStart () { }
+
+        protected internal virtual void OnDespawn() { }
 
         /// <summary>
         /// Write the objects snapshot to the given stream

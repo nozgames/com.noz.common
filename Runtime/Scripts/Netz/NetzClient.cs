@@ -69,7 +69,6 @@ namespace NoZ.Netz
             _router.AddRoute(NetzConstants.Messages.Connect, OnConnectMessage);
             _router.AddRoute(NetzConstants.Messages.Disconnect, OnDisconnectMessage);
             _router.AddRoute(NetzConstants.Messages.Spawn, OnSpawnMessage);
-            _router.AddRoute(NetzConstants.Messages.Despawn, OnDespawnMessage);
             _router.AddRoute(NetzConstants.Messages.ClientStates, OnClientStates);
         }
 
@@ -93,7 +92,7 @@ namespace NoZ.Netz
 
         internal void Update ()
         {
-            if (!_driver.IsCreated)
+            if(!_driver.IsCreated)
                 return;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -128,6 +127,9 @@ namespace NoZ.Netz
                         break;
                 }
             }
+
+            if (state == NetzClientState.Disconnected)
+                Dispose();
         }
 
         private void ReadMessage(DataStreamReader reader)
@@ -197,8 +199,6 @@ namespace NoZ.Netz
 
         private void OnDisconnectMessage(FourCC messageType, NetzClient target, ref DataStreamReader reader)
         {
-            Dispose();
-
             state = NetzClientState.Disconnected;
         }
 
@@ -215,12 +215,6 @@ namespace NoZ.Netz
                 return;
 
             reader.ReadTransform(netzObject.transform);
-        }
-
-        private void OnDespawnMessage(FourCC messageType, NetzClient target, ref DataStreamReader reader)
-        {
-            var networkInstanceID = reader.ReadULong();
-            NetzObjectManager.DespawnOnClient(networkInstanceID);
         }
 
         /// <summary>

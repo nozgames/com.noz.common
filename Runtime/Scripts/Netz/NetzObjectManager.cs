@@ -122,22 +122,23 @@ namespace NoZ.Netz
             // Remove from the tracked object list
             _objects.Remove(netobj.networkInstanceId);
 
+            netobj.OnDespawn();
+
             // Disable the object so it does not think until it can be despawned
             netobj.gameObject.SetActive(false);
         }
 
         internal static void DespawnOnClient (ulong networkInstanceId)
         {
-            if (NetzManager.instance.isClient && !NetzManager.instance.isHost)
+            if (!NetzManager.instance.isClient || NetzManager.instance.isHost)
                 return;
 
             if (!TryGetObject(networkInstanceId, out var netobj))
                 return;
 
-            if(netobj._dirtyNode.List != null)
-                _dirtyObjects.Remove(netobj._dirtyNode);
-
             _objects.Remove(networkInstanceId);
+
+            netobj.OnDespawn();
 
             Object.Destroy(netobj.gameObject);
         }

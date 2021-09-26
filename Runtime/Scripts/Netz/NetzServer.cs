@@ -203,14 +203,8 @@ namespace NoZ.Netz
                 
                 if (state == NetzObjectState.Despawning)
                 {
-                    using (var message = NetzMessage.Create(null, NetzConstants.Messages.Despawn))
-                    {
-                        var writer = message.BeginWrite();
-                        writer.WriteULong(netobj.networkInstanceId);
-                        message.EndWrite(writer);
-
+                    using (var message = NetzMessage.Create(netobj, NetzConstants.Messages.Despawn))
                         SendToAllClients(message, includeHost: false);
-                    }
 
                     UnityEngine.Object.Destroy(netobj.gameObject);
                 }
@@ -240,7 +234,7 @@ namespace NoZ.Netz
                 {
                     var netobj = kv.Value;
 
-                    if(!netobj.isSceneObject)
+                    if(!netobj.isSceneObject && !netobj.isCustomObject)
                     {
                         using (var message = NetzMessage.Create(null, NetzConstants.Messages.Spawn))
                         {
