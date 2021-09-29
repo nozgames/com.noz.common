@@ -3,14 +3,14 @@ using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
 
-namespace NoZ.Style
+namespace NoZ.Stylez
 {
-    [CustomEditor(typeof(StyleSheet))]
+    [CustomEditor(typeof(StylezSheet))]
     public class StyleSheetEditor : Editor
     {
         public override void OnInspectorGUI()
         {
-            var sheet = target as StyleSheet;
+            var sheet = target as StylezSheet;
 
             GUI.enabled = true;
 

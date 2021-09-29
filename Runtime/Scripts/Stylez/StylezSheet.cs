@@ -3,9 +3,9 @@ using System.Text.RegularExpressions;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace NoZ.Style
+namespace NoZ.Stylez
 {
-    public class StyleSheet : ScriptableObject
+    public class StylezSheet : ScriptableObject
     {
         private static Regex ParseRegex = new Regex(
             @"([A-Za-z][\w_-]*|\#[A-Za-z][\w_\-\:]*|{|}|;|:|,|\.|\d\.?\d*|\#[\dA-Fa-f]+|//.*\n)", 
@@ -39,7 +39,7 @@ namespace NoZ.Style
         [SerializeField] private string _error;
         [SerializeField] private int _errorLine;
 
-        private Dictionary<int, Dictionary<ulong, StylePropertyValue>> _properties;
+        private Dictionary<int, Dictionary<ulong, StylezPropertyValue>> _properties;
 
         private Dictionary<ulong, ulong> _selectorBase = new Dictionary<ulong, ulong>();
 
@@ -52,14 +52,14 @@ namespace NoZ.Style
             onReload?.Invoke();
         }
 
-        private static ulong MakeSelector(int hash, Style.State state)
+        private static ulong MakeSelector(int hash, StylezState state)
         {
             if ((int)state == -1)
-                state = (int)Style.State.Normal;
+                state = (int)StylezState.Normal;
             return ((ulong)hash) + (((ulong)state) << 32);
         }
 
-        private StylePropertyValue Search (Dictionary<ulong, StylePropertyValue> properties, ulong selector)
+        private StylezPropertyValue Search (Dictionary<ulong, StylezPropertyValue> properties, ulong selector)
         {
             if (properties.TryGetValue(selector, out var property))
                 return property;
@@ -78,7 +78,7 @@ namespace NoZ.Style
             return null;
         }
 
-        private StylePropertyValue Search(Style style, int propertyId)
+        private StylezPropertyValue Search(StylezStyle style, int propertyId)
         {
             if (null == _properties)
                 BuildPropertyDictionary();
@@ -91,22 +91,22 @@ namespace NoZ.Style
                 return propertyValue;
 
             var state = style.state;
-            if (state == Style.State.SelectedHover)
-                propertyValue = Search(properties, MakeSelector(style.idHash, Style.State.Hover));
+            if (state == StylezState.SelectedHover)
+                propertyValue = Search(properties, MakeSelector(style.idHash, StylezState.Hover));
 
-            if (null == propertyValue && state == Style.State.SelectedPressed)
-                propertyValue = Search(properties, MakeSelector(style.idHash, Style.State.Pressed));
+            if (null == propertyValue && state == StylezState.SelectedPressed)
+                propertyValue = Search(properties, MakeSelector(style.idHash, StylezState.Pressed));
 
-            if (null == propertyValue && state != Style.State.Normal)
-                propertyValue = Search(properties, MakeSelector(style.idHash, Style.State.Normal));
+            if (null == propertyValue && state != StylezState.Normal)
+                propertyValue = Search(properties, MakeSelector(style.idHash, StylezState.Normal));
 
             return propertyValue;
         }
 
-        public bool TryGetValue<T> (Style style, string propertyName, out T value) => 
-            TryGetValue<T>(style, Style.StringToHash(propertyName), out value);
+        public bool TryGetValue<T> (StylezStyle style, string propertyName, out T value) => 
+            TryGetValue<T>(style, StylezStyle.StringToHash(propertyName), out value);
 
-        public bool TryGetValue<T> (Style style, int propertyNameHashId, out T value)
+        public bool TryGetValue<T> (StylezStyle style, int propertyNameHashId, out T value)
         {
             var property = Search(style, propertyNameHashId) as StylePropertyValue<T>;
             if (null == property)
@@ -135,7 +135,7 @@ namespace NoZ.Style
             }
         }
 
-        public static StyleSheet Parse(string text)
+        public static StylezSheet Parse(string text)
         {
             var matches = ParseRegex.Matches(text);
             if (matches.Count == 0)
@@ -160,7 +160,7 @@ namespace NoZ.Style
                 tokens.Add(new Token { index = matches[i].Index, value = value, line = line });
             }
 
-            var sheet = CreateInstance<StyleSheet>();
+            var sheet = CreateInstance<StylezSheet>();
 
             try
             {
@@ -201,19 +201,19 @@ namespace NoZ.Style
                 name = name.Substring(0, colon);
 
                 if (stateName == "hover")
-                    state = (int)Style.State.Hover;
+                    state = (int)StylezState.Hover;
                 else if (stateName == "normal")
-                    state = (int)Style.State.Normal;
+                    state = (int)StylezState.Normal;
                 else if (stateName == "disabled")
-                    state = (int)Style.State.Disabled;
+                    state = (int)StylezState.Disabled;
                 else if (stateName == "pressed")
-                    state = (int)Style.State.Pressed;
+                    state = (int)StylezState.Pressed;
                 else if (stateName == "selected")
-                    state = (int)Style.State.Selected;
+                    state = (int)StylezState.Selected;
                 else if (stateName == "selected:hover")
-                    state = (int)Style.State.SelectedHover;
+                    state = (int)StylezState.SelectedHover;
                 else if (stateName == "selected:pressed")
-                    state = (int)Style.State.SelectedPressed;
+                    state = (int)StylezState.SelectedPressed;
                 else
                     throw new ParseException(tokens[tokenIndex - 1], $"unknown state \"{stateName}\"");
             }
@@ -312,7 +312,7 @@ namespace NoZ.Style
         private void BuildPropertyDictionary()
         {
             // Populate the dictionary from the serialized values
-            _properties = new Dictionary<int, Dictionary<ulong, StylePropertyValue>>();
+            _properties = new Dictionary<int, Dictionary<ulong, StylezPropertyValue>>();
             _selectorBase = new Dictionary<ulong, ulong>();
 
             if (_styles == null)
@@ -320,48 +320,48 @@ namespace NoZ.Style
 
             foreach (var serializedStyle in _styles)
             {
-                var styleNameHashId = Style.StringToHash(serializedStyle.selector.name);
-                var selector = MakeSelector(styleNameHashId, (Style.State)serializedStyle.selector.state);
+                var styleNameHashId = StylezStyle.StringToHash(serializedStyle.selector.name);
+                var selector = MakeSelector(styleNameHashId, (StylezState)serializedStyle.selector.state);
 
                 // Inheritence
                 if(!string.IsNullOrEmpty(serializedStyle.inherit.name))
                 {
-                    var inheritNameHashId = Style.StringToHash(serializedStyle.inherit.name);
+                    var inheritNameHashId = StylezStyle.StringToHash(serializedStyle.inherit.name);
 
                     // If both states are "All" then inherit each state individually
                     if (serializedStyle.selector.state == -1 && serializedStyle.inherit.state == -1)
                     {
-                        foreach (var state in Enum.GetValues(typeof(Style.State)) as Style.State[])
+                        foreach (var state in Enum.GetValues(typeof(StylezState)) as StylezState[])
                             SetBaseSelector(MakeSelector(styleNameHashId, state), MakeSelector(inheritNameHashId, state));
                     }
 
                     // If no state was specified for the selector then set all states for this selector to the same base state 
                     else if (serializedStyle.selector.state == -1)
                     {
-                        var baseSelector = MakeSelector(inheritNameHashId, (Style.State)serializedStyle.inherit.state);
-                        foreach (var state in Enum.GetValues(typeof(Style.State)) as Style.State[])
+                        var baseSelector = MakeSelector(inheritNameHashId, (StylezState)serializedStyle.inherit.state);
+                        foreach (var state in Enum.GetValues(typeof(StylezState)) as StylezState[])
                             SetBaseSelector(MakeSelector(styleNameHashId, state), baseSelector);
                     }
 
                     // If no state was specified for the base then use the normal state
                     else if (serializedStyle.inherit.state == -1)
-                        SetBaseSelector(selector, MakeSelector(inheritNameHashId, Style.State.Normal));
+                        SetBaseSelector(selector, MakeSelector(inheritNameHashId, StylezState.Normal));
                     
                     // Inerit one state from another..
                     else
-                        SetBaseSelector(selector, MakeSelector(inheritNameHashId, (Style.State)serializedStyle.inherit.state));
+                        SetBaseSelector(selector, MakeSelector(inheritNameHashId, (StylezState)serializedStyle.inherit.state));
                 }
 
                 foreach (var serializedProperty in serializedStyle.properties)
                 {
-                    var propertyNameHashId = Style.StringToHash(serializedProperty.name);
+                    var propertyNameHashId = StylezStyle.StringToHash(serializedProperty.name);
                     if (!_properties.TryGetValue(propertyNameHashId, out var selectors))
                     {
-                        selectors = new Dictionary<ulong, StylePropertyValue>();
+                        selectors = new Dictionary<ulong, StylezPropertyValue>();
                         _properties[propertyNameHashId] = selectors;
                     }
 
-                    if (!Style._propertyInfos.TryGetValue(propertyNameHashId, out var propertyInfo))
+                    if (!StylezStyle._propertyInfos.TryGetValue(propertyNameHashId, out var propertyInfo))
                     {
                         Debug.LogWarning($"Unknown property \"{name}\" in style sheet");
                         return;

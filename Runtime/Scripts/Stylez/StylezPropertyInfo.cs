@@ -1,26 +1,26 @@
 using System;
 
-namespace NoZ.Style
+namespace NoZ.Stylez
 {
-    internal class StylePropertyInfo
+    internal class StylezPropertyInfo
     {
         public string name;
         public int nameHashId;
-        public Func<string, StylePropertyValue> thunkParse;
+        public Func<string, StylezPropertyValue> thunkParse;
 
         /// <summary>
         /// Parse text into a property value for this property
         /// </summary>
-        public StylePropertyValue Parse(string text) => thunkParse(text);
+        public StylezPropertyValue Parse(string text) => thunkParse(text);
     }
 
-    internal class StylePropertyInfo<T> : StylePropertyInfo
+    internal class StylezPropertyInfo<T> : StylezPropertyInfo
     {
         public T defaultValue;
 
         public static Func<string, T> parse;
 
-        public static StylePropertyValue ThunkParse(string text) =>
+        public static StylezPropertyValue ThunkParse(string text) =>
             parse == null ? null : new StylePropertyValue<T> { value = parse.Invoke(text) };
     }
 }

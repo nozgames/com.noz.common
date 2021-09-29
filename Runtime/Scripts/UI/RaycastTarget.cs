@@ -22,10 +22,12 @@
   SOFTWARE.
 */
 
+using UnityEngine;
 using UnityEngine.UI;
 
 namespace NoZ 
 {
+    [RequireComponent(typeof(CanvasRenderer))]
     public class RaycastTarget : Graphic 
     {
         public override void SetMaterialDirty() {return;}

@@ -8,7 +8,7 @@ using UnityEditor.AssetImporters;
 using UnityEditor.Experimental.AssetImporters;
 #endif
 
-namespace NoZ.Style
+namespace NoZ.Stylez
 {
     [ScriptedImporter(1, "uiss")]
     public class StyleSheetImporter : ScriptedImporter
@@ -43,7 +43,7 @@ namespace NoZ.Style
         public override void OnImportAsset(AssetImportContext ctx)
         {
             var text = File.ReadAllText(ctx.assetPath);
-            var sheet = StyleSheet.Parse(text);
+            var sheet = StylezSheet.Parse(text);
             if (null == sheet)
                 return;
 

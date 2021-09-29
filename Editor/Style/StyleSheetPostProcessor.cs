@@ -1,6 +1,6 @@
 using UnityEditor;
 
-namespace NoZ.Style
+namespace NoZ.Stylez
 {
     public class StyleSheetPostProcessor : AssetPostprocessor
     {
@@ -10,7 +10,7 @@ namespace NoZ.Style
             {
                 if (str.EndsWith(".uiss"))
                 {
-                    StyleSheet.ReloadAll();
+                    StylezSheet.ReloadAll();
                     return;
                 }
             }

@@ -5,51 +5,56 @@ using UnityEngine;
 
 // TODO: id = (parent with provider name) - (name)
 
-namespace NoZ.Style
+namespace NoZ.Stylez
 {
-    public class Style : MonoBehaviour
+    [Serializable]
+    public class StylezStyle2
     {
-        public enum State
-        {
-            Normal,
-            Hover,
-            Pressed,
-            Selected,
-            SelectedHover,
-            SelectedPressed,
-            Disabled
-        }
-
         [Tooltip("Optional style sheet style and all children")]
-        [SerializeField] private StyleSheet _styleSheet = null;
+        [SerializeField] private StylezSheet _styleSheet = null;
 
         [Tooltip("Identifier of the style")]
         [SerializeField] private string _id = null;
 
         /// <summary>
-        /// Global list of register state providers
+        /// Parent style for all styles that do not have providers
         /// </summary>
-        private static List<StateProviderInfo> _stateProviders = new List<StateProviderInfo>();
+        private StylezStyle _parent = null;
+
+        /// <summary>
+        /// Style targets
+        /// </summary>
+        // TODO: can we store the target info with this to prevent needing a lookup?
+        private Component[] _targets;
+    }
+
+    public class StylezStyle : MonoBehaviour
+    {
+        [Tooltip("Optional style sheet style and all children")]
+        [SerializeField] private StylezSheet _styleSheet = null;
+
+        [Tooltip("Identifier of the style")]
+        [SerializeField] private string _id = null;
 
         /// <summary>
         /// Global list of registered target components
         /// </summary>
-        private static Dictionary<Type, StyleTargetInfo> _targetInfos = new Dictionary<Type, StyleTargetInfo>();
+        private static Dictionary<Type, StylezTargetInfo> _targetInfos = new Dictionary<Type, StylezTargetInfo>();
 
         /// <summary>
         /// Global list of registered properties
         /// </summary>
-        internal static Dictionary<int, StylePropertyInfo> _propertyInfos = new Dictionary<int, StylePropertyInfo>();
+        internal static Dictionary<int, StylezPropertyInfo> _propertyInfos = new Dictionary<int, StylezPropertyInfo>();
 
         /// <summary>
         /// State provider for this style
         /// </summary>
-        private StateProvider _stateProvider;
+        private IStylezStateProvider _stateProvider;
 
         /// <summary>
         /// Parent style for all styles that do not have providers
         /// </summary>
-        private Style _parent = null;
+        private StylezStyle _parent = null;
 
         /// <summary>
         /// Style targets
@@ -63,20 +68,20 @@ namespace NoZ.Style
         internal int idHash { get; private set; }
 
 
-        private StyleSheet _activeSheet = null;
+        private StylezSheet _activeSheet = null;
 
-        public Style parent => null;
+        public StylezStyle parent => null;
 
-        private List<Style> _children;
+        private List<StylezStyle> _children;
 
         public bool isLinked { get; private set; }
 
         /// <summary>
         /// Return the current state of the style
         /// </summary>
-        public State state => _stateProvider != null ? _stateProvider.state : (_parent != null ? _parent.state : State.Normal);
+        public StylezState state => _stateProvider != null ? _stateProvider.GetState() : (_parent != null ? _parent.state : StylezState.Normal);
 
-        public StyleSheet styleSheet
+        public StylezSheet styleSheet
         {
             get => _styleSheet;
             set
@@ -93,33 +98,20 @@ namespace NoZ.Style
 
         public void Attach()
         {
-            if (_stateProvider != null)
-            {
-                _stateProvider.onStateChanged -= OnStateChanged;
-                Destroy(_stateProvider);
-                _stateProvider = null;
-            }
+            if(null != _stateProvider)
+                _stateProvider.SetStateChangedCallback(null);
 
-            // Search for a provider
-            foreach (var provider in _stateProviders)
-            {
-                if(gameObject.TryGetComponent(provider.componentType, out var component))
-                {
-                    _stateProvider = gameObject.AddComponent(provider.providerType) as StateProvider;
-                    _stateProvider.Attach(component);
-                    _stateProvider.onStateChanged += OnStateChanged;
-                    break;
-                }
-            }
+            _stateProvider = GetComponent<IStylezStateProvider>();
+            if (null != _stateProvider)
+                _stateProvider.SetStateChangedCallback(OnStateChanged);
 
             // Search for targets
             _targets = GetComponents<Component>().Where(t => _targetInfos.TryGetValue(t.GetType(), out var value)).ToArray();
         }
 
-        private void OnStateChanged(StateProvider provider)
+        private void OnStateChanged(StylezState state)
         {
-            if (provider == _stateProvider)
-                Apply(recurseChildren:true);
+            Apply(recurseChildren:true);
         }
 
         private void LinkToParent ()
@@ -128,11 +120,11 @@ namespace NoZ.Style
                 return;
 
             // Search for the next parent up the chain
-            _parent = transform.parent != null ? transform.parent.GetComponentInParent<Style>() : null;
+            _parent = transform.parent != null ? transform.parent.GetComponentInParent<StylezStyle>() : null;
             if (null != _parent)
             {
                 if (null == _parent._children)
-                    _parent._children = new List<Style>();
+                    _parent._children = new List<StylezStyle>();
 
                 _parent._children.Add(this);
             }
@@ -159,7 +151,7 @@ namespace NoZ.Style
             Apply();
         }
 
-        private void SetActiveStyleSheet(StyleSheet activeSheet)
+        private void SetActiveStyleSheet(StylezSheet activeSheet)
         {
             // If we have our own style sheet then stop the chain
             if (_styleSheet != null)
@@ -204,12 +196,12 @@ namespace NoZ.Style
             LinkToParent();
             Apply();
 
-            StyleSheet.onReload += OnReload;
+            StylezSheet.onReload += OnReload;
         }
 
         private void OnDisable()
         {
-            StyleSheet.onReload -= OnReload;
+            StylezSheet.onReload -= OnReload;
         }
 
         private void OnReload ()
@@ -241,43 +233,15 @@ namespace NoZ.Style
 
         public static int StringToHash(string name) => string.IsNullOrEmpty(name) ? 0 : Animator.StringToHash(name.ToLower());
 
-        private static StyleTargetInfo GetOrCreateStyleTargetInfo(Type targetType)
+        private static StylezTargetInfo GetOrCreateStyleTargetInfo(Type targetType)
         {
             if (_targetInfos.TryGetValue(targetType, out var targetDef))
                 return targetDef;
 
-            targetDef = new StyleTargetInfo { type = targetType };
-            targetDef.properties = new List<StyleTargetPropertyInfo>();
+            targetDef = new StylezTargetInfo { type = targetType };
+            targetDef.properties = new List<StylezTargetPropertyInfo>();
             _targetInfos[targetType] = targetDef;
             return targetDef;
-        }
-
-        /// <summary>
-        /// Register a state style system state provider that attaches to a known component on the game object
-        /// that the style is attached to.
-        /// </summary>
-        /// <typeparam name="ProviderType">Type of the provider</typeparam>
-        /// <typeparam name="ComponentType">Type of the component to attach to</typeparam>
-        public static void RegisterStateProvider<ProviderType,ComponentType>() where ProviderType : Component
-        {
-            if (_stateProviders.Any(p => p.componentType == typeof(ComponentType)))
-                throw new InvalidOperationException("only one provider can be registered for any component type");
-
-            var providerInfo = new StateProviderInfo { componentType = typeof(ComponentType), providerType = typeof(ProviderType) };
-            
-            // Check to see if the state provider component is derived from any of the providers in the list 
-            // and if so make sure it is in the list first so it will be chosen over the base.
-            for (int i=0; i < _stateProviders.Count; i++)
-            {
-                if(_stateProviders[i].componentType.IsAssignableFrom(typeof(ComponentType)))
-                {
-                    _stateProviders.Insert(i, providerInfo);
-                    return;
-                }
-            }
-
-            // Add to the end
-            _stateProviders.Add(providerInfo);
         }
 
         /// <summary>
@@ -292,10 +256,10 @@ namespace NoZ.Style
                 throw new ArgumentNullException("parse");
 
             // Can only register once
-            if (StylePropertyInfo<PropertyType>.parse != null)
+            if (StylezPropertyInfo<PropertyType>.parse != null)
                 throw new InvalidOperationException($"Property type \"{typeof(PropertyType)}\" is already registered");
 
-            StylePropertyInfo<PropertyType>.parse = parse;
+            StylezPropertyInfo<PropertyType>.parse = parse;
         }
 
         /// <summary>
@@ -312,12 +276,12 @@ namespace NoZ.Style
                 throw new InvalidOperationException("Duplicate propety names are not allowed");
 
             // Create the property and add it to the global property info dictionary
-            var propertyInfo = new StylePropertyInfo<PropertyType>
+            var propertyInfo = new StylezPropertyInfo<PropertyType>
             {
                 name = name,
                 nameHashId = nameHashId,
                 defaultValue = defaultValue,
-                thunkParse = StylePropertyInfo<PropertyType>.ThunkParse
+                thunkParse = StylezPropertyInfo<PropertyType>.ThunkParse
             };
 
             _propertyInfos[nameHashId] = propertyInfo;
@@ -340,14 +304,8 @@ namespace NoZ.Style
             GetOrCreateStyleTargetInfo(typeof(TargetType)).AddProperty(propertyInfo, apply);
         }
 
-        static Style ()
+        static StylezStyle ()
         {
-#if UNITY_EDITOR
-            // Register state providers
-            RegisterStateProvider<SelectableStateProvider, UnityEngine.UI.Selectable>();
-            RegisterStateProvider<ToggleStateProvider, UnityEngine.UI.Toggle>();
-#endif
-
             // Property types
             RegisterPropertyType((s) => float.TryParse(s, out var value) ? value : 0.0f);
             RegisterPropertyType((s) => bool.TryParse(s, out var value) ? value : false);

@@ -2,7 +2,8 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NoZ.Style
+#if false
+namespace NoZ.Stylez
 {
 #if UNITY_EDITOR
     public class ToggleStateProvider : SelectableStateProvider
@@ -23,7 +24,7 @@ namespace NoZ.Style
             UpdateState();
         }
 
-        protected override Style.State GetCurrentState()
+        protected override StylezStyle.State GetCurrentState()
         {
             var toggle = selectable as Toggle;
             var state = base.GetCurrentState();
@@ -32,11 +33,11 @@ namespace NoZ.Style
             {
                 switch(state)
                 {
-                    case Style.State.Pressed: return Style.State.Normal;
-                    case Style.State.Hover: return Style.State.Pressed;
-                    case Style.State.Selected: return Style.State.SelectedPressed;
-                    case Style.State.SelectedHover: return Style.State.SelectedPressed;
-                    case Style.State.Normal: return Style.State.Pressed;
+                    case StylezStyle.State.Pressed: return StylezStyle.State.Normal;
+                    case StylezStyle.State.Hover: return StylezStyle.State.Pressed;
+                    case StylezStyle.State.Selected: return StylezStyle.State.SelectedPressed;
+                    case StylezStyle.State.SelectedHover: return StylezStyle.State.SelectedPressed;
+                    case StylezStyle.State.Normal: return StylezStyle.State.Pressed;
                 }
             }
 
@@ -45,3 +46,5 @@ namespace NoZ.Style
     }
 #endif
 }
+
+#endif
