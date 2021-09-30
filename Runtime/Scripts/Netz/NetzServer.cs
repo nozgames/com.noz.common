@@ -1,13 +1,14 @@
 #if UNITY_COLLECTIONS && UNITY_TRANSPORT
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
 using Unity.Collections;
 using Unity.Networking.Transport;
 using Unity.Networking.Transport.Utilities;
 using UnityEngine;
 using UnityEngine.Assertions;
+using UnityEngine.SceneManagement;
 
 namespace NoZ.Netz
 {
@@ -24,6 +25,7 @@ namespace NoZ.Netz
             public bool isHost;
         }
 
+        private NetworkEndPoint _endpoint;
         private NetworkDriver _driver;
         private NetworkPipeline _pipeline;
         private List<ConnectedClient> _clients;
@@ -31,6 +33,8 @@ namespace NoZ.Netz
         private NetzMessageRouter<ConnectedClient> _router;
         private float _snapshotInterval = 1.0f / 20.0f;
         private float _snapshotElapsed = 0.0f;
+        private string _scene;
+        private NetzServerState _state = NetzServerState.Unknown;
 
         /// <summary>
         /// Identifier of the current snapshot
@@ -55,6 +59,8 @@ namespace NoZ.Netz
         /// Number of clients connected to the server
         /// </summary>
         public int clientCount => _clients.Count;
+
+        public NetzServerState state => _state;
 
         private NetzServer()
         {
@@ -87,19 +93,35 @@ namespace NoZ.Netz
 
         public static NetzServer Create (NetworkEndPoint endpoint)
         {
-            var server = new NetzServer();
+            var server = new NetzServer { 
+                _endpoint = endpoint,
+                _snapshotInterval = 1.0f / NetzManager.instance._updateRate
+            };
 
+            // Bind the the port
             if (server._driver.Bind(endpoint) != 0)
             {
                 server.Dispose();
                 return null;
             }
-            else
-                server._driver.Listen();
 
-            server._snapshotInterval = 1.0f / NetzManager.instance._updateRate;
+            // Listen for new connections
+            if(0 != server._driver.Listen())
+            {
+                server.Dispose();
+                return null;
+            }
+
+            server.SetState(NetzServerState.Running);
 
             return server;
+        }
+
+        private void SetState (NetzServerState state)
+        {
+            var old = _state;
+            _state = state;
+            NetzManager.instance.RaiseServerStateChanged(old, state);
         }
 
         internal void Update ()
@@ -160,6 +182,10 @@ namespace NoZ.Netz
                     }
                 }
             }
+
+            // Only send snapshots when in the running state.
+            if (_state != NetzServerState.Running)
+                return;
 
             // Throttle snapshots
             _snapshotElapsed += Time.unscaledDeltaTime;
@@ -418,6 +444,56 @@ namespace NoZ.Netz
             }
         }
 
+        public Coroutine LoadSceneAsync (string sceneName)
+        {
+            IEnumerator LoadCoroutine()
+            {
+                // Unload the old scene
+                if (_scene != null)
+                {
+                    yield return SceneManager.UnloadSceneAsync(_scene);
+
+                    _scene = null;
+                }
+
+                // Send a message to all clients to load a new scene
+                using (var message = NetzMessage.Create(null, NetzConstants.Messages.LoadScene))
+                {
+                    var writer = message.BeginWrite();
+                    writer.WriteFixedString32(sceneName);
+                    message.EndWrite(writer);
+
+                    for (int clientIndex = 0; clientIndex < _clients.Count; clientIndex++)
+                    {
+                        var client = _clients[clientIndex];
+                        if (client.isHost || client.state != NetzClientState.Connected)
+                            continue;
+
+                        client.state = NetzClientState.LoadingScene;
+
+                        if (!client.isHost)
+                            SendToClient(client, message);
+                    }
+                }
+
+                // Load the scene and wait for it to finish to start snapshots back up
+                yield return SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive);
+
+                _scene = sceneName;
+
+                // Register and start all of the scene objects
+                NetzObjectManager.SpawnSceneObjects();
+
+                // Back to running state
+                SetState(NetzServerState.Running);
+            }
+
+            // Switch to loading state so we stop sending snapshots
+            SetState(NetzServerState.LoadingScene);
+
+            // Start a coroutine to load the state
+            return NetzManager.instance.StartCoroutine(LoadCoroutine());
+        }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         private void SendToDebugger(ConnectedClient client, FourCC messageId, int length, bool received)

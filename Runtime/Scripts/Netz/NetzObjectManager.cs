@@ -20,12 +20,14 @@ namespace NoZ.Netz
         public static bool TryGetObject (ulong networkInstanceId, out NetzObject obj) =>
             _objects.TryGetValue(networkInstanceId, out obj);
 
-        internal static void RegisterSceneObjects ()
+        internal static void SpawnSceneObjects ()
         {
-            foreach(var obj in Object.FindObjectsOfType<NetzObject>())
-            {
+            var sceneObjects = Object.FindObjectsOfType<NetzObject>();
+            foreach (var obj in sceneObjects)
                 _objects.Add(obj.networkInstanceId, obj);
-            }
+
+            foreach (var obj in sceneObjects)
+                obj.NetworkStart();
         }
 
         public static T SpawnCustom<T> (ulong networkInstanceId, Transform parent) where T : NetzObject

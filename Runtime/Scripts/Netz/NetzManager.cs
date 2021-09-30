@@ -19,14 +19,17 @@ namespace NoZ.Netz
         public bool isHost => _client != null && _server != null;
         public bool isClient => _client != null;
         public bool isServer => _server != null;
+        public bool isServerOrHost => isServer || isHost;
+
+        public NetzServerState serverState => _server?.state ?? NetzServerState.Unknown;
+
+        public NetzClientState clientState => _client?.state ?? NetzClientState.Unknown;
 
         public int connectedClientCount => _server?.clientCount ?? 0;
 
         public uint localClientId => _client?.id ?? 0;
 
-        public event ServerStartedEvent onServerStarted;
-
-        public event ServerStoppedEvent onServerStopped;
+        public event ServerStateChangedEvent onServerStateChanged;
 
         public event ClientStateChangeEvent onClientStateChanged;
 
@@ -88,46 +91,48 @@ namespace NoZ.Netz
                 _client.Disconnect();
         }
 
-        public void StartServer ()
+        public void StartServer (ushort port =9000)
         {
-            StartServerInternal();
-            NetzObjectManager.RegisterSceneObjects();
-
-            onServerStarted?.Invoke();
+            StartServerInternal(port);
         }
 
-        private void StartServerInternal ()
+        private void StartServerInternal (ushort port)
         {
             var endpoint = NetworkEndPoint.AnyIpv4;
-            endpoint.Port = 9000;
-
+            endpoint.Port = port;
             _server = NetzServer.Create(endpoint);
-
-            // TODO: error binding to port?
-
         }
 
-        public void StartHost ()
+        public void StartHost (ushort port = 9000)
         {
-            StartServerInternal();
-            StartClientInternal();
+            StartServerInternal(port);
 
-            NetzObjectManager.RegisterSceneObjects();
-
-            onServerStarted?.Invoke();
-        }
-
-        public void StartClient ()
-        {
-            StartClientInternal();
-            NetzObjectManager.RegisterSceneObjects();
-        }
-
-        public void StartClientInternal ()
-        {
             var endpoint = NetworkEndPoint.LoopbackIpv4;
-            endpoint.Port = 9000;
+            endpoint.Port = port;
+            StartClientInternal(endpoint);
+        }
+
+        public void StartClient (NetworkEndPoint endpoint)
+        {
+            StartClientInternal(endpoint);
+            NetzObjectManager.SpawnSceneObjects();
+        }
+
+        public void StartClientInternal (NetworkEndPoint endpoint)
+        {
             _client = NetzClient.Connect(endpoint);
+        }
+
+        /// <summary>
+        /// Load the given scene
+        /// </summary>
+        /// <param name="sceneName"></param>
+        public Coroutine LoadSceneAsync (string sceneName)
+        {
+            if (!isServerOrHost)
+                throw new InvalidOperationException("LoadSceneAsync can only be called on the server");
+
+            return _server.LoadSceneAsync(sceneName);
         }
 
         private void Update()
@@ -147,6 +152,11 @@ namespace NoZ.Netz
         internal void RaiseClientStateChanged (uint clientId, NetzClientState oldState, NetzClientState newState)
         {
             onClientStateChanged?.Invoke(clientId, oldState, newState);
+        }
+
+        internal void RaiseServerStateChanged(NetzServerState oldState, NetzServerState newState)
+        {
+            onServerStateChanged?.Invoke(oldState, newState);
         }
     }
 }

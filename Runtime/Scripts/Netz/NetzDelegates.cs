@@ -7,6 +7,8 @@ namespace NoZ.Netz
     public delegate void ServerStartedEvent ();
 
     public delegate void ServerStoppedEvent ();
+
+    public delegate void ServerStateChangedEvent(NetzServerState oldState, NetzServerState newState);
 }
 
 #endif

@@ -68,6 +68,11 @@ namespace NoZ.Netz
             /// Sends the current client state for all clients
             /// </summary>
             public static readonly FourCC ClientStates = new FourCC('C', 'L', 'S', 'T');
+
+            /// <summary>
+            /// Load a scene
+            /// </summary>
+            public static readonly FourCC LoadScene = new FourCC('L', 'D', 'S', 'N');
         }
     }
 }
