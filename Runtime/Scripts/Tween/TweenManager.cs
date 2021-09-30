@@ -22,34 +22,66 @@
   SOFTWARE.
 */
 
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace NoZ
+namespace NoZ.Tweenz
 {
-    public class TweenManager : MonoBehaviour
+    internal class TweenManager : Singleton<TweenManager>
     {
-        public static TweenManager Instance = null;
+        private const int MaxTweens = 1024;
 
-        public int MaxPoolSize = 128;
+        private Tween[] _tweens = new Tween[1024];
 
-        /// <summary>
-        /// Pool of animations available for use
-        /// </summary>
-        public Queue<Tween> Pool { get; internal set; }
+        private List<Tween> _pool = new List<Tween>(MaxTweens);
 
-        public void Awake()
+        protected override void OnInitialize()
         {
-            if(Instance != null)
+            base.OnInitialize();
+
+            // Preallocate the maximum number of tweens for simplicity
+            // TODO: we could make this more on demand later
+            for (int i = 0; i < MaxTweens; i++)
             {
-                Debug.LogError("Only one TweenManager can exist in a scene");
-                Destroy(gameObject);
-                return;
+                _tweens[i] = new Tween();
+                _tweens[i]._id._index = (uint)i;
+                _tweens[i]._id._iteration = 1;
+                _tweens[i]._flags |= Tween.Flags.Free;
+                _pool.Add(_tweens[i]);
             }
+        }
 
-            Instance = this;
+        internal Tween AllocTween()
+        {
+            if (_pool.Count <= 0)
+                throw new InvalidOperationException("Maximum Tweenz count exceeded.");
 
-            Pool = new Queue<Tween>();
+            var tween = _pool[_pool.Count - 1];
+            _pool.RemoveAt(_pool.Count - 1);
+
+            if (!tween.IsFree)
+                throw new InvalidOperationException("Tween in free list that was not free");
+
+            tween._id._iteration++;
+            return tween;
+        }
+
+        internal void FreeTween (Tween tween)
+        {
+            if (tween.IsFree)
+                return;
+
+            _pool.Add(tween);
+        }
+
+        public Tween GetTween (TweenzId id)
+        {
+            var tween = _tweens[id._index];
+            if (null == tween || id._iteration != tween._id._iteration || tween.IsFree)
+                return null;
+
+            return tween;
         }
 
         public void Update()

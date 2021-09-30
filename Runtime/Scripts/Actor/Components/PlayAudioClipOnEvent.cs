@@ -22,7 +22,7 @@ namespace NoZ
             if (evt.GetType() != _event.Type)
                 return;
 
-            AudioManager.Instance.Play(_clip);
+            AudioManager.instance.Play(_clip);
         }
     }
 }

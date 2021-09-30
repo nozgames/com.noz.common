@@ -24,7 +24,7 @@
 
 using UnityEngine;
 
-namespace NoZ
+namespace NoZ.Tweenz
 {
     public enum EaseType
     {
@@ -41,7 +41,7 @@ namespace NoZ
         EaseInElastic,
         EaseOutElastic,
         EaseInOutElastic,
-    }
+    }    
 
     /// <summary>
     /// Plays an tween on a node
@@ -49,7 +49,7 @@ namespace NoZ
     public partial class Tween
     {
         [System.Flags]
-        private enum Flags : ushort
+        internal enum Flags : ushort
         {
             /// <summary>
             /// Indicates the tween should process the children as a sequence rather than a group
@@ -99,7 +99,9 @@ namespace NoZ
             /// <summary>
             /// Automatically deactivate the target object when the tween completes
             /// </summary>
-            AutoDeactivate = (1<<9)
+            AutoDeactivate = (1<<9),
+
+            Free = (1 << 10)
         }
 
         private delegate float EasingDelegate(float t, float p1, float p2);
@@ -148,8 +150,10 @@ namespace NoZ
         private Tween _firstChild;
         private Tween _lastChild;
         private Tween _parent;
-        private Flags _flags;
+        internal Flags _flags;
         private int _loopCount;
+
+        internal TweenzId _id;
 
         #region Static
 
@@ -309,12 +313,12 @@ namespace NoZ
 
             switch (updateMode)
             {
-                case NoZ.TweenUpdateMode.FixedUpdate:
+                case TweenUpdateMode.FixedUpdate:
                     elapsedNormal = Time.fixedDeltaTime;
                     elapsedUnscaled = Time.fixedUnscaledDeltaTime;
                     break;
 
-                case NoZ.TweenUpdateMode.Update:
+                case TweenUpdateMode.Update:
                     elapsedNormal = Time.deltaTime;
                     elapsedUnscaled = Time.unscaledDeltaTime;
                     break;
@@ -359,9 +363,12 @@ namespace NoZ
         /// <returns></returns>
         private static Tween AllocTween()
         {
-            var tween = (TweenManager.Instance != null && TweenManager.Instance.Pool.Count > 0) ? TweenManager.Instance.Pool.Dequeue() : new Tween();
+            if (TweenManager.instance == null)
+                return null;
+
+            var tween = TweenManager.instance.AllocTween();
             tween._delay = 0f;
-            tween._updateMode = NoZ.TweenUpdateMode.Update;
+            tween._updateMode = TweenUpdateMode.Update;
             tween._flags = 0;
             tween._elapsed = 0f;
             tween._duration = 1f;
@@ -375,8 +382,12 @@ namespace NoZ
         /// <param name="tween"></param>
         private static void FreeTween(Tween tween)
         {
+            // Return the tween to the pool if there is rool
+            if (TweenManager.instance != null)
+                TweenManager.instance.FreeTween(tween);
+
             tween.IsActive = false;
-            tween._flags = 0;
+            tween._flags = Flags.Free;
             tween._key = null;
             tween._onStop = null;
             tween._onStart = null;
@@ -392,10 +403,6 @@ namespace NoZ
             tween._firstChild = null;
             tween._lastChild = null;
             tween._parent = null;
-
-            // Return the tween to the pool if there is rool
-            if (TweenManager.Instance != null && TweenManager.Instance.Pool.Count < TweenManager.Instance.MaxPoolSize)
-                TweenManager.Instance.Pool.Enqueue(tween);
         }
 
         static Tween()
@@ -410,7 +417,14 @@ namespace NoZ
                         ).CreateDelegate(typeof(EasingDelegate));
         }
 
-#endregion
+        #endregion
+
+        /// <summary>
+        /// Checks if the tween with the given identifier is finished.
+        /// </summary>
+        /// <param name="id">Tween identifier</param>
+        /// <returns>True if the tween is finished, false if not</returns>
+        public static bool IsDone(TweenzId id) => TweenManager.instance?.GetTween(id) != null;
 
         public bool IsActive {
             get => (_flags & Flags.Active) == Flags.Active;
@@ -446,6 +460,8 @@ namespace NoZ
         public bool IsLowPriority => (_flags & Flags.LowPriority) == Flags.LowPriority;
         public bool IsAutoDestroy => (_flags & Flags.AutoDestroy) == Flags.AutoDestroy;
         public bool IsAutoDeactivate => (_flags & Flags.AutoDeactivate) == Flags.AutoDeactivate;
+        
+        internal bool IsFree => (_flags & Flags.Free) == Flags.Free;
 
         public static Tween Shake(Vector2 positionalIntensity, float rotationalIntensity)
         {
@@ -718,13 +734,13 @@ namespace NoZ
 
         }
 
-        public void Start(MonoBehaviour behavior) => Start(behavior.gameObject);
+        public TweenzId Start(MonoBehaviour behavior) => Start(behavior.gameObject);
 
         /// <summary>
         /// Start the tween on the given node
         /// </summary>
         /// <param name="node">Node the tween should run on</param>
-        public void Start(GameObject gameObject)
+        public TweenzId Start(GameObject gameObject)
         {
             // If the tween has a key stop any other tweens with the same key
             if (!string.IsNullOrEmpty(_key))
@@ -735,24 +751,26 @@ namespace NoZ
             _gameObject = gameObject;
 
             if (!ResolveTarget(gameObject))
-                return;
+                return TweenzId.Empty;
 
             StartInternal();
 
             // If there is no tween manager then force the tween to stop since
             // there is non update loop that can advance time for it
-            if (TweenManager.Instance == null)
+            if (TweenManager.instance == null)
                 IsActive = false;
                 
             if (!IsActive)
             {
                 Stop(this);
-                return;
+                return TweenzId.Empty;
             }
 
             // Unpause the tween system if there are tweens to run
             if (_root._firstChild != null)
-                IsPaused = false; 
+                IsPaused = false;
+
+            return _id;
         }
 
         private bool ResolveTarget(GameObject gameObject)

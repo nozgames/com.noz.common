@@ -25,18 +25,20 @@ namespace NoZ
         [Range(0, 2)]
         public float pitch = 1f;
 
+        public AudioChannel channel;
+
         public HapticFeedbackType hapticFeedback = HapticFeedbackType.None;
 
         public AudioClip GetRandomClip() => (clips == null || clips.Length == 0) ? null : clips[Random.Range(0, clips.Length - 1)];
 
         public void Play()
         {
-            AudioManager.Instance.Play(this);
+            AudioManager.instance?.Play(this);
         }
 
         public void Play(float volume, float pitch)
         {
-            AudioManager.Instance.Play(this, volume, pitch);
+            AudioManager.instance?.Play(this, volume, pitch);
         }
     }
 

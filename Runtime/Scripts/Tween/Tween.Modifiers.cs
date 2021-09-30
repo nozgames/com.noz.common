@@ -25,7 +25,7 @@
 using System;
 using UnityEngine;
 
-namespace NoZ
+namespace NoZ.Tweenz
 {
     public partial class Tween
     {

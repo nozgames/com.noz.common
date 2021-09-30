@@ -1,4 +1,4 @@
-﻿/*
+/*
   NoZ Unity Library
 
   Copyright(c) 2019 NoZ Games, LLC
@@ -24,16 +24,25 @@
 
 namespace NoZ.Tweenz
 {
-    public enum TweenUpdateMode
+    public struct TweenzId
     {
-        /// <summary>
-        /// Update during the normal variable step update cycle
-        /// </summary>
-        Update,
+        public static readonly TweenzId Empty = new TweenzId { _index = 0, _iteration = 0 };
 
-        /// <summary>
-        /// Update during the fixed step update cycle
-        /// </summary>
-        FixedUpdate
+        internal uint _index;
+        internal uint _iteration;
+
+        public bool Equals(TweenzId other) => other._index == _index && other._iteration == _iteration;
+
+        public override string ToString() => ((ulong)this).ToString();
+
+        public static bool operator ==(TweenzId lhs, TweenzId rhs) => lhs._index == rhs._index && lhs._iteration == rhs._iteration;
+
+        public static bool operator !=(TweenzId lhs, TweenzId rhs) => !(lhs == rhs);
+
+        public override bool Equals(object obj) => this.Equals((TweenzId)obj);
+
+        public static implicit operator ulong(TweenzId id) => (((ulong)id._index) << 32) + id._iteration;
+
+        public override int GetHashCode() => (int)_index;
     }
 }
