@@ -3,7 +3,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using Unity.Collections;
 using Unity.Networking.Transport;
 using Unity.Networking.Transport.Utilities;
 using UnityEngine;
@@ -12,7 +11,7 @@ using UnityEngine.SceneManagement;
 
 namespace NoZ.Netz
 {
-    internal unsafe class NetzServer : IDisposable
+    public unsafe class NetzServer
     {
         private class ConnectedClient
         {
@@ -22,7 +21,12 @@ namespace NoZ.Netz
             public int lastSnapshotSent;
             public int lastSnapshotReceived;
             public uint id;
-            public bool isHost;
+            public double lastMessageSendTime;
+            public double lastMessageReceiveTime;
+            public NetzPlayer player;
+
+            public double timeSinceLastMessageSent => Time.realtimeSinceStartupAsDouble - lastMessageSendTime;
+            public double timeSinceLastMessageReceived => Time.realtimeSinceStartupAsDouble - lastMessageReceiveTime;
         }
 
         private NetworkEndPoint _endpoint;
@@ -34,6 +38,7 @@ namespace NoZ.Netz
         private float _snapshotInterval = 1.0f / 20.0f;
         private float _snapshotElapsed = 0.0f;
         private string _scene;
+        private Type _playerType;
         private NetzServerState _state = NetzServerState.Unknown;
 
         /// <summary>
@@ -50,10 +55,8 @@ namespace NoZ.Netz
         private NetzDebuggerClient _debugger;
 #endif
 
-        /// <summary>
-        /// Event raised when a clients state changes
-        /// </summary>
-        public event ClientStateChangeEvent onClientStateChanged;
+        public static NetzServer instance { get; private set; }
+        public static bool isCreated => instance != null;
 
         /// <summary>
         /// Number of clients connected to the server
@@ -62,17 +65,64 @@ namespace NoZ.Netz
 
         public NetzServerState state => _state;
 
-        private NetzServer()
-        {
-            _clients = new List<ConnectedClient>(16);
-            _driver = NetworkDriver.Create(new ReliableUtility.Parameters { WindowSize = 32 });
-            _pipeline = _driver.CreatePipeline(typeof(ReliableSequencedPipelineStage));
+        public int MaxClients { get; set; } = 16;
 
+        public ushort port => _endpoint.Port;
+
+        public int playerCount => _clients.Count;
+
+        private NetzServer(ushort port, Type playerType)
+        {
+            if (null == playerType)
+                throw new ArgumentNullException("playerType");
+
+            if (!typeof(NetzPlayer).IsAssignableFrom(playerType))
+                throw new InvalidOperationException("playerType must be derived from NetzPlayer");
+
+            _playerType = playerType;
+            _clients = new List<ConnectedClient>(16);
+            _driver = NetworkDriver.Create(new FragmentationUtility.Parameters { PayloadCapacity = NetzConstants.MaxMessageSize });
+            _pipeline = _driver.CreatePipeline(typeof(FragmentationPipelineStage));
+
+            // Initialize the message router
             _router.AddRoute(NetzConstants.Messages.Connect, OnClientConnectAck);
             _router.AddRoute(NetzConstants.Messages.Disconnect, OnClientDisconnect);
+            _router.AddRoute(NetzConstants.Messages.Synchronize, OnSynchronizeAck);
+
+            _endpoint = NetworkEndPoint.LoopbackIpv4;
+            _endpoint.Port = port;
+            _snapshotInterval = 1.0f / NetzManager.instance._updateRate;
+
+            // Bind the the port
+            if (_driver.Bind(_endpoint) != 0)
+                return;
+
+            // Listen for new connections
+            if (0 != _driver.Listen())
+                return;
+
+            // Server is idle until a scene is loaded
+            SetState(NetzServerState.Idle);
         }
 
-        public void Dispose()
+        /// <summary>
+        /// Create a server
+        /// </summary>
+        /// <param name="port">Port to run server on</param>
+        public static void Start(ushort port, Type playerType)
+        {
+            if (instance != null)
+                throw new InvalidOperationException("Only one server can be created at a time");
+
+            if (NetzClient.instance != null)
+                throw new InvalidOperationException("Server must be started before client");
+
+            instance = new NetzServer(port, playerType);
+            if (instance.state != NetzServerState.Idle)
+                instance.Stop();
+        }
+
+        public void Stop()
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (_debugger != null)
@@ -85,36 +135,12 @@ namespace NoZ.Netz
             if (_driver.IsCreated)
             {
                 foreach (var client in _clients)
-                    client.connection.Close(_driver);
+                    client.connection.Disconnect(_driver);
 
                 _driver.Dispose();
             }
-        }
 
-        public static NetzServer Create (NetworkEndPoint endpoint)
-        {
-            var server = new NetzServer { 
-                _endpoint = endpoint,
-                _snapshotInterval = 1.0f / NetzManager.instance._updateRate
-            };
-
-            // Bind the the port
-            if (server._driver.Bind(endpoint) != 0)
-            {
-                server.Dispose();
-                return null;
-            }
-
-            // Listen for new connections
-            if(0 != server._driver.Listen())
-            {
-                server.Dispose();
-                return null;
-            }
-
-            server.SetState(NetzServerState.Running);
-
-            return server;
+            instance = null;
         }
 
         private void SetState (NetzServerState state)
@@ -122,6 +148,164 @@ namespace NoZ.Netz
             var old = _state;
             _state = state;
             NetzManager.instance.RaiseServerStateChanged(old, state);
+        }
+
+        public NetzPlayer GetPlayer(int index) => _clients[index].player;
+        public NetzClientState GetClientState(int index) => _clients[index].state;
+
+        public T GetPlayer<T>(int index) where T : NetzPlayer => _clients[index].player as T;
+
+        /// <summary>
+        /// Send disconnect message to a connection with an optional reason for the disconnect
+        /// </summary>
+        /// <param name="connection">Connection</param>
+        /// <param name="reason">Optional Reason for the disconnect</param>
+        private void Disconnect (NetworkConnection connection, NetzDisconnectReason reason = NetzDisconnectReason.Unknown)
+        {
+            using var message = NetzMessage.Create(null, NetzConstants.Messages.Disconnect);
+            var writer = message.BeginWrite();
+            writer.WriteByte((byte)reason);
+            message.EndWrite(writer);
+            SendMessage(connection, message);
+
+            connection.Disconnect(_driver);
+        }
+
+        /// <summary>
+        /// Disconnect the given connected client
+        /// </summary>
+        /// <param name="client">Client to disconnect</param>
+        /// <param name="reason"></param>
+        private void Disconnect(ConnectedClient client, NetzDisconnectReason reason = NetzDisconnectReason.Unknown)
+        {
+            _clients.Remove(client);
+
+            // Send a disconnect message as long as the client is still connected.
+            if(_driver.GetConnectionState(client.connection) == NetworkConnection.State.Connected)
+                Disconnect(client.connection, reason);
+        }
+
+        private void SendMessage (NetworkConnection c, NetzMessage message)
+        {
+            _driver.BeginSend(_pipeline, c, out var clientWriter);
+            clientWriter.WriteBytes(message.buffer, message.length);
+            _driver.EndSend(clientWriter);
+        }
+
+        private void UpdateClientStateConnecting (ConnectedClient client)
+        {
+            if (client.state != NetzClientState.Connecting)
+                return;
+
+            var elapsed = client.timeSinceLastMessageSent;
+            if (elapsed >= NetzConstants.ConnectTimeout)
+            {
+                Disconnect(client, NetzDisconnectReason.Timeout);
+                return;
+            }
+
+            // Resend connection messages every second until we get a response or timeout
+            if (elapsed >= NetzConstants.ConnectMessageResendInterval)
+            {
+                // Send connect message to client
+                using (var message = NetzMessage.Create(null, NetzConstants.Messages.Connect))
+                {
+                    var writer = message.BeginWrite();
+                    writer.WriteUInt(client.id);
+                    message.EndWrite(writer);
+
+                    SendToClient(client, message);
+                }
+            }
+        }
+
+        private void UpdateClientStateConnected(ConnectedClient client)
+        {
+            if (state != NetzServerState.Active)
+                return;
+
+            SetClientState(client, NetzClientState.Synchronizing);
+        }
+
+        /// <summary>
+        /// Accept incoming connections to the server
+        /// </summary>
+        private void AcceptConnections ()
+        {
+            // Accept new connections
+            NetworkConnection c;
+            while ((c = _driver.Accept()) != default(NetworkConnection))
+            {
+                // Reject the client if the maximum number of clients has been reached
+                if(_clients.Count >= MaxClients)
+                {
+                    Disconnect(c, NetzDisconnectReason.ServerFull);
+                    continue;
+                }
+
+                // TODO: handle reconnecting clients
+
+                // Add a new client
+                var time = Time.realtimeSinceStartupAsDouble;
+                var client = new ConnectedClient { 
+                    connection = c, 
+                    state = NetzClientState.Connecting, 
+                    id = _nextClientId++,
+                    lastMessageReceiveTime = time,
+                    lastMessageSendTime = time - NetzConstants.ConnectMessageResendInterval
+                };
+
+                _clients.Add(client);
+            }
+        }
+
+        private void UpdateClient (ConnectedClient client)
+        {
+            // Read incoming data from all clients
+            DataStreamReader stream;
+
+            // Read all available events for the client
+            NetworkEvent.Type cmd;
+            while ((cmd = _driver.PopEventForConnection(client.connection, out stream)) != NetworkEvent.Type.Empty)
+            {
+                switch(cmd)
+                {
+                    case NetworkEvent.Type.Connect:
+                        break;
+
+                    case NetworkEvent.Type.Disconnect:
+                        Disconnect(client);
+                        break;
+
+                    case NetworkEvent.Type.Data:
+                        ReadMessage(client, stream);
+                        break;
+                }
+            }
+
+            switch (client.state)
+            {
+                case NetzClientState.Connecting:
+                    UpdateClientStateConnecting(client);
+                    break;
+
+                case NetzClientState.Connected:
+                    UpdateClientStateConnected(client);
+                    break;
+
+                case NetzClientState.Synchronizing:
+                    UpdateClientStateSynchronizing(client);
+                    break;
+
+                case NetzClientState.Active:
+                    UpdateClientStateActive(client);
+                    break;
+            }
+        }
+
+        private void UpdateClients ()
+        {
+
         }
 
         internal void Update ()
@@ -133,56 +317,12 @@ namespace NoZ.Netz
 
             _driver.ScheduleUpdate().Complete();
 
-            // Clean up any clients that have disconnected
-            for (int i = 0; i < _clients.Count; i++)
-            {
-                if (!_clients[i].connection.IsCreated)
-                {
-                    _clients.RemoveAtSwapBack(i);
-                    --i;
-                }
-            }
+            AcceptConnections();
 
-            // Accept new connections
-            NetworkConnection c;
-            while ((c = _driver.Accept()) != default(NetworkConnection))
-            {
-                var client = new ConnectedClient { connection = c, state = NetzClientState.Connecting, id = _nextClientId++ };
-                _clients.Add(client);
+            for (int i = _clients.Count - 1; i >= 0; i--)
+                UpdateClient(_clients[i]);
 
-                // Send a connect message to the client to assign it an identifier
-                using (var message = NetzMessage.Create(null, NetzConstants.Messages.Connect))
-                {
-                    var writer = message.BeginWrite();
-                    writer.WriteUInt(client.id);
-                    message.EndWrite(writer);
-
-                    SendToClient(client, message);
-                }
-            }
-
-            // Read incoming data from all clients
-            DataStreamReader stream;
-            for (int i = 0; i < _clients.Count; i++)
-            {
-                var client = _clients[i];
-                Assert.IsTrue(client.connection.IsCreated);
-
-                NetworkEvent.Type cmd;
-                while ((cmd = _driver.PopEventForConnection(client.connection, out stream)) != NetworkEvent.Type.Empty)
-                {
-                    if (cmd == NetworkEvent.Type.Data)
-                    {
-                        ReadMessage(client, stream);
-                    }
-                    else if (cmd == NetworkEvent.Type.Disconnect)
-                    {
-                        _clients.RemoveAtSwapBack(i);
-                        i--;
-                    }
-                }
-            }
-
+#if false
             // Only send snapshots when in the running state.
             if (_state != NetzServerState.Running)
                 return;
@@ -205,7 +345,7 @@ namespace NoZ.Netz
 
                 // Do not need to send snapshots to ourself when we are the host, just skip if we are the only client
                 // TODO: we should also skip this when there arent any clients that are fully connected yet.
-                if (_clients.Count == 1 && _clients[0].isHost)
+                if (_clients.Count == 1 && _clients[0].player.isHost)
                     continue;
 
                 // If the object is spawning we first need to send a spawn message before we send the snapshow
@@ -246,8 +386,10 @@ namespace NoZ.Netz
                     }
                 }
             }
+#endif
+#if false
+            // 
 
-#if true
             // Send snapshots to any clients that are still synchronizing
             // TODO: we need to use cached synchronization state here so this isnt so taxing
             for (int i = 0; i < _clients.Count; i++)
@@ -290,6 +432,7 @@ namespace NoZ.Netz
             }
 #endif
 
+#if false
             // Update any client states
             SendClientStates();
 
@@ -303,6 +446,75 @@ namespace NoZ.Netz
 
                     _clients[i].connection = default(NetworkConnection);
                 }
+            }
+#endif
+        }
+
+        /// <summary>
+        /// Synchronize a client to the current server state.  This is generally done when a client
+        /// first connects but can be done again later if the client desyncs
+        /// </summary>
+        /// <param name="client">Client to synchronize</param>
+        private void UpdateClientStateSynchronizing (ConnectedClient client)
+        {
+            if (state != NetzServerState.Active)
+                return;
+
+            if (client.state != NetzClientState.Synchronizing)
+                return;
+
+            // If already synchronizing then make sure do not do it too often
+            if (client.timeSinceLastMessageSent < NetzConstants.SynchronizeInterval)
+                return;
+
+            using var message = NetzMessage.Create(null, NetzConstants.Messages.Synchronize);
+            var writer = message.BeginWrite();
+            writer.WriteFixedString32(_scene);
+
+            // Send all players to the client
+            writer.WriteByte((byte)_clients.Count);
+            for(int i=0; i< _clients.Count; i++)
+            {
+                var connectedClient = _clients[i];
+                writer.WriteUInt(client.id);
+                connectedClient.player.Serialize(ref writer);
+            }
+
+            message.EndWrite(writer);
+
+            // TODO: send deleted scene objects
+            // TODO: send snapshots for all objects modified (generally all but could be some non-modified scene objects)
+
+            SendToClient(client, message);
+        }
+
+        private void OnSynchronizeAck (FourCC messageType, ConnectedClient client, ref DataStreamReader reader)
+        {
+            // Client is now active in the world and can receive snapshots
+            SetClientState(client, NetzClientState.Active);
+        }
+
+        private void UpdateClientStateActive (ConnectedClient client)
+        {
+            // Too soon?
+            if (client.lastMessageSendTime < _snapshotInterval)
+                return;
+
+            using (var message = NetzMessage.Create(null, NetzConstants.Messages.Snapshot))
+            {
+                SendToClient(client, message);
+            }
+        }
+
+        private void UpdateConnectedClient (ConnectedClient client)
+        {
+            switch(client.state)
+            {
+                case NetzClientState.LoadingScene:
+                    // TODO: send a message to the client telling them to load the scene
+                    // TODO: when we know the client has loaded the scene then we can start synchronizing
+                    // TODO: snapshot to the client will just contain the map
+                    break;
             }
         }
 
@@ -325,6 +537,8 @@ namespace NoZ.Netz
             SendToDebugger(client, message.id, length:message.length, received: false);
 #endif
 
+            client.lastMessageSendTime = Time.realtimeSinceStartupAsDouble;
+
             _driver.BeginSend(_pipeline, client.connection, out var clientWriter);
             clientWriter.WriteBytes(message.buffer, message.length);
             _driver.EndSend(clientWriter);
@@ -341,7 +555,7 @@ namespace NoZ.Netz
                     continue;
 
                 // Skip the host?
-                if (!includeHost && NetzManager.instance.localClientId == client.id)
+                if (!includeHost && client.player.isHost)
                     continue;
 
                 SendToClient(client, message);
@@ -379,12 +593,23 @@ namespace NoZ.Netz
         private void OnClientConnectAck(FourCC messageType, ConnectedClient client, ref DataStreamReader reader)
         {
             var clientId = reader.ReadUInt();
-            UnityEngine.Debug.Assert(client.id == clientId);
+
+            // Disconnect the client if they are sending garbage
+            if(clientId != client.id)
+            {
+                Disconnect(client);
+                return;
+            }
+
+            // Read the player information
+            client.player = Activator.CreateInstance(_playerType) as NetzPlayer;
+            client.player.Deserialize(ref reader);
 
             // Is this client the host?
-            client.isHost = client.id == NetzManager.instance.localClientId && NetzManager.instance.isServer;
+            client.player.isHost = client.id == (NetzClient.instance?.id ?? uint.MaxValue);
 
-            SetClientState(client, client.isHost ? NetzClientState.Connected : NetzClientState.Synchronizing);
+            // Transition the client to the connected state
+            SetClientState(client, NetzClientState.Connected);
         }
 
         /// <summary>
@@ -448,6 +673,13 @@ namespace NoZ.Netz
         {
             IEnumerator LoadCoroutine()
             {
+                // Move all clients that are in some form of connected state back to connected.  This 
+                // will ensure they do not receive any updates besides a keep alive until the server
+                // is finished loading the scene.
+                for (int i = 0; i < _clients.Count; i++)
+                    if (_clients[i].state >= NetzClientState.Connected)
+                        SetClientState(_clients[i], NetzClientState.Connected);
+
                 // Unload the old scene
                 if (_scene != null)
                 {
@@ -466,12 +698,12 @@ namespace NoZ.Netz
                     for (int clientIndex = 0; clientIndex < _clients.Count; clientIndex++)
                     {
                         var client = _clients[clientIndex];
-                        if (client.isHost || client.state != NetzClientState.Connected)
+                        if (client.player.isHost || client.state != NetzClientState.Connected)
                             continue;
 
                         client.state = NetzClientState.LoadingScene;
 
-                        if (!client.isHost)
+                        if (!client.player.isHost)
                             SendToClient(client, message);
                     }
                 }
@@ -484,12 +716,12 @@ namespace NoZ.Netz
                 // Register and start all of the scene objects
                 NetzObjectManager.SpawnSceneObjects();
 
-                // Back to running state
-                SetState(NetzServerState.Running);
+                // Set state to running now that we have a loaded scene
+                SetState(NetzServerState.Active);
             }
 
-            // Switch to loading state so we stop sending snapshots
-            SetState(NetzServerState.LoadingScene);
+            // Switch to loading state until we are done loading scene
+            SetState(NetzServerState.Loading);
 
             // Start a coroutine to load the state
             return NetzManager.instance.StartCoroutine(LoadCoroutine());

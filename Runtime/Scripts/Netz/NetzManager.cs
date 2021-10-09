@@ -12,22 +12,12 @@ namespace NoZ.Netz
         [SerializeField] internal int _updateRate = 20;
         [SerializeField] private NetzObject[] _prefabs = null;
 
-        private NetzClient _client;
-        private NetzServer _server;
         private Dictionary<ulong, NetzObject> _prefabsByHash;
 
-        public bool isHost => _client != null && _server != null;
-        public bool isClient => _client != null;
-        public bool isServer => _server != null;
+        public bool isHost => NetzClient.instance != null && NetzServer.instance != null;
+        public bool isClient => NetzClient.instance != null && NetzServer.instance == null;
+        public bool isServer => NetzClient.instance == null && NetzServer.instance != null;
         public bool isServerOrHost => isServer || isHost;
-
-        public NetzServerState serverState => _server?.state ?? NetzServerState.Unknown;
-
-        public NetzClientState clientState => _client?.state ?? NetzClientState.Unknown;
-
-        public int connectedClientCount => _server?.clientCount ?? 0;
-
-        public uint localClientId => _client?.id ?? 0;
 
         public event ServerStateChangedEvent onServerStateChanged;
 
@@ -70,26 +60,25 @@ namespace NoZ.Netz
         {
             base.OnShutdown();
 
-            if (_client != null)
-            {
-                _client.Dispose();
-                _client = null;
-            }
+            if (NetzClient.instance != null)
+                NetzClient.instance.Disconnect();
 
-            if (_server != null)
-            {
-                _server.Dispose();
-                _server = null;
-            }
+            if (NetzServer.instance != null)
+                NetzServer.instance.Stop();
+
+            Debug.Assert(NetzClient.instance == null);
+            Debug.Assert(NetzServer.instance == null);
 
             NetzMessage.Shutdown();
         }
 
+#if false
         public void Stop ()
         {
             if (_client != null)
                 _client.Disconnect();
         }
+
 
         public void StartServer (ushort port =9000)
         {
@@ -122,6 +111,7 @@ namespace NoZ.Netz
         {
             _client = NetzClient.Connect(endpoint);
         }
+#endif
 
         /// <summary>
         /// Load the given scene
@@ -132,21 +122,16 @@ namespace NoZ.Netz
             if (!isServerOrHost)
                 throw new InvalidOperationException("LoadSceneAsync can only be called on the server");
 
-            return _server.LoadSceneAsync(sceneName);
+            return NetzServer.instance.LoadSceneAsync(sceneName);
         }
 
         private void Update()
         {
-            if (_server != null)
-                _server.Update();
+            if (NetzServer.instance != null)
+                NetzServer.instance.Update();
 
-            if (_client != null)
-            {
-                _client.Update();
-
-                if (_client.state == NetzClientState.Disconnected)
-                    _client = null;
-            }
+            if (NetzClient.instance != null)
+                NetzClient.instance.Update();
         }
 
         internal void RaiseClientStateChanged (uint clientId, NetzClientState oldState, NetzClientState newState)

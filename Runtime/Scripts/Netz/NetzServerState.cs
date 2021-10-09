@@ -7,7 +7,8 @@ namespace NoZ.Netz
     public enum NetzServerState
     {
         Unknown,
-        Running,
-        LoadingScene,
+        Idle,
+        Loading,
+        Active
     }
 }

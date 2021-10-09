@@ -25,6 +25,26 @@ namespace NoZ.Netz
         /// </summary>
         internal const ulong ObjectInstanceIdTypeMask = ((ulong)1 << 63) | ((ulong)1 << 62);
 
+        /// <summary>
+        /// How often a connect message is sent from server to client 
+        /// </summary>
+        internal const double ConnectMessageResendInterval = 1.0;
+
+        /// <summary>
+        /// How long the server will wait for a client to respond to a connect message
+        /// </summary>
+        internal const double ConnectTimeout = 10.0;
+
+        /// <summary>
+        /// How often a synchronize message can be sent
+        /// </summary>
+        internal const double SynchronizeInterval = 1.0f;
+
+        /// <summary>
+        /// Maximum message size
+        /// </summary>
+        internal const int MaxMessageSize = 4096;
+
         public static class Messages
         {
             /// <summary>
@@ -73,6 +93,11 @@ namespace NoZ.Netz
             /// Load a scene
             /// </summary>
             public static readonly FourCC LoadScene = new FourCC('L', 'D', 'S', 'N');
+
+            /// <summary>
+            /// Synchronize a client with he server
+            /// </summary>
+            public static readonly FourCC Synchronize = new FourCC('S', 'Y', 'N', 'C');
         }
     }
 }

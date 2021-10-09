@@ -69,7 +69,7 @@ namespace NoZ.Netz
         public bool isCustomObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == NetzConstants.CustomNetworkInstanceId;
         public bool isSpawnedObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == NetzConstants.SpawnedObjectInstanceId;
 
-        public bool isOwnedByLocalClient => ownerClientId == NetzManager.instance.localClientId;
+        public bool isOwnedByLocalClient => ownerClientId == (NetzClient.instance?.id ?? uint.MaxValue);
 
         /// <summary>
         /// Identifier of the client that owns this object
