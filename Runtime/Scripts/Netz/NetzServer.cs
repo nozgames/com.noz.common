@@ -11,6 +11,7 @@ using UnityEngine.SceneManagement;
 
 namespace NoZ.Netz
 {
+    [DefaultExecutionOrder(int.MaxValue)]
     public unsafe class NetzServer
     {
         private class ConnectedClient
@@ -20,6 +21,8 @@ namespace NoZ.Netz
             public NetzClientState state;
             public int lastSnapshotSent;
             public int lastSnapshotReceived;
+            public uint lastAcknowledgedSnapshopId;
+            public uint lastSendSnapshotId;
             public uint id;
             public double lastMessageSendTime;
             public double lastMessageReceiveTime;
@@ -71,6 +74,8 @@ namespace NoZ.Netz
 
         public int playerCount => _clients.Count;
 
+        public uint currentSnapshotId => _snapshotId;
+
         private NetzServer(ushort port, Type playerType)
         {
             if (null == playerType)
@@ -86,7 +91,6 @@ namespace NoZ.Netz
 
             // Initialize the message router
             _router.AddRoute(NetzConstants.Messages.Connect, OnClientConnectAck);
-            _router.AddRoute(NetzConstants.Messages.Disconnect, OnClientDisconnect);
             _router.AddRoute(NetzConstants.Messages.Synchronize, OnSynchronizeAck);
 
             _endpoint = NetworkEndPoint.LoopbackIpv4;
@@ -162,12 +166,6 @@ namespace NoZ.Netz
         /// <param name="reason">Optional Reason for the disconnect</param>
         private void Disconnect (NetworkConnection connection, NetzDisconnectReason reason = NetzDisconnectReason.Unknown)
         {
-            using var message = NetzMessage.Create(null, NetzConstants.Messages.Disconnect);
-            var writer = message.BeginWrite();
-            writer.WriteByte((byte)reason);
-            message.EndWrite(writer);
-            SendMessage(connection, message);
-
             connection.Disconnect(_driver);
         }
 
@@ -275,7 +273,7 @@ namespace NoZ.Netz
 
                     case NetworkEvent.Type.Disconnect:
                         Disconnect(client);
-                        break;
+                        return;
 
                     case NetworkEvent.Type.Data:
                         ReadMessage(client, stream);
@@ -285,29 +283,18 @@ namespace NoZ.Netz
 
             switch (client.state)
             {
-                case NetzClientState.Connecting:
-                    UpdateClientStateConnecting(client);
-                    break;
-
-                case NetzClientState.Connected:
-                    UpdateClientStateConnected(client);
-                    break;
-
-                case NetzClientState.Synchronizing:
-                    UpdateClientStateSynchronizing(client);
-                    break;
-
-                case NetzClientState.Active:
-                    UpdateClientStateActive(client);
-                    break;
+                case NetzClientState.Connecting: UpdateClientStateConnecting(client); break;
+                case NetzClientState.Connected: UpdateClientStateConnected(client); break;
+                case NetzClientState.Synchronizing: UpdateClientStateSynchronizing(client); break;
+                case NetzClientState.Active: UpdateClientStateActive(client); break;
             }
         }
 
-        private void UpdateClients ()
+        internal void FixedUpdate ()
         {
-
+            _snapshotId++;
         }
-
+        
         internal void Update ()
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -502,20 +489,25 @@ namespace NoZ.Netz
 
             using (var message = NetzMessage.Create(null, NetzConstants.Messages.Snapshot))
             {
+                var writer = message.BeginWrite();
+                writer.WriteUInt(_snapshotId);
+
+                // The host does not need the list of objects because they are already updated
+                if (!client.player.isHost)
+                {
+                    for (var node = NetzObjectManager._objects.First; node != null && node.Value._changedInSnapshot > client.lastAcknowledgedSnapshopId; node = node.Next)
+                    {
+                        writer.WriteULong(node.Value._networkInstanceId);
+                        node.Value.Write(ref writer);
+                    }
+                }
+
+                writer.WriteULong(0);
+                message.EndWrite(writer);
                 SendToClient(client, message);
             }
-        }
 
-        private void UpdateConnectedClient (ConnectedClient client)
-        {
-            switch(client.state)
-            {
-                case NetzClientState.LoadingScene:
-                    // TODO: send a message to the client telling them to load the scene
-                    // TODO: when we know the client has loaded the scene then we can start synchronizing
-                    // TODO: snapshot to the client will just contain the map
-                    break;
-            }
+            client.lastSendSnapshotId = _snapshotId;
         }
 
         private void SetClientState (ConnectedClient client, NetzClientState state)
@@ -613,21 +605,12 @@ namespace NoZ.Netz
         }
 
         /// <summary>
-        /// Handle notfication from client that they are disconnecting.  This is the graceful way for a client
-        /// to leave a server as it cleans up properly.  
-        /// </summary>
-        private void OnClientDisconnect(FourCC messageType, ConnectedClient client, ref DataStreamReader reader)
-        {
-            // Go straight to disconnected as disconnecting would not mean anything to the server.
-            SetClientState(client, NetzClientState.Disconnected);
-        }
-
-        /// <summary>
         /// Send the client states of all clients to the given client or all clients if no client is specified.
         /// </summary>
         /// <param name="client">Optional client to send to</param>
         private void SendClientStates (ConnectedClient client=null, bool force=false)
         {
+#if false
             if (!force && !_clientStateDirty)
                 return;
 
@@ -667,6 +650,7 @@ namespace NoZ.Netz
                 else
                     SendToClient(client, message);
             }
+#endif
         }
 
         public Coroutine LoadSceneAsync (string sceneName)
@@ -686,26 +670,6 @@ namespace NoZ.Netz
                     yield return SceneManager.UnloadSceneAsync(_scene);
 
                     _scene = null;
-                }
-
-                // Send a message to all clients to load a new scene
-                using (var message = NetzMessage.Create(null, NetzConstants.Messages.LoadScene))
-                {
-                    var writer = message.BeginWrite();
-                    writer.WriteFixedString32(sceneName);
-                    message.EndWrite(writer);
-
-                    for (int clientIndex = 0; clientIndex < _clients.Count; clientIndex++)
-                    {
-                        var client = _clients[clientIndex];
-                        if (client.player.isHost || client.state != NetzClientState.Connected)
-                            continue;
-
-                        client.state = NetzClientState.LoadingScene;
-
-                        if (!client.player.isHost)
-                            SendToClient(client, message);
-                    }
                 }
 
                 // Load the scene and wait for it to finish to start snapshots back up

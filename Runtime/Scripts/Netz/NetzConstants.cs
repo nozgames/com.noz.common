@@ -41,6 +41,11 @@ namespace NoZ.Netz
         internal const double SynchronizeInterval = 1.0f;
 
         /// <summary>
+        /// How often to send keep alive message
+        /// </summary>
+        internal const float KeepAliveInterval = 5.0f;
+
+        /// <summary>
         /// Maximum message size
         /// </summary>
         internal const int MaxMessageSize = 4096;
@@ -51,11 +56,6 @@ namespace NoZ.Netz
             /// Connection message
             /// </summary>
             public static readonly FourCC Connect = new FourCC('C', 'O', 'N', 'N');
-
-            /// <summary>
-            /// Disconnect message
-            /// </summary>
-            public static readonly FourCC Disconnect = new FourCC('D', 'C', 'O', 'N');
 
             /// <summary>
             /// Message sent by clients periodically to keep the connection alive
@@ -83,16 +83,6 @@ namespace NoZ.Netz
             /// Debug message for debugger
             /// </summary>
             public static readonly FourCC Debug = new FourCC('D', 'B', 'U', 'G');
-
-            /// <summary>
-            /// Sends the current client state for all clients
-            /// </summary>
-            public static readonly FourCC ClientStates = new FourCC('C', 'L', 'S', 'T');
-
-            /// <summary>
-            /// Load a scene
-            /// </summary>
-            public static readonly FourCC LoadScene = new FourCC('L', 'D', 'S', 'N');
 
             /// <summary>
             /// Synchronize a client with he server

@@ -5,6 +5,8 @@ using Unity.Networking.Transport;
 using System;
 using System.Runtime.CompilerServices;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Linq;
 
 [assembly: InternalsVisibleTo("NoZ.Common.Editor")]
 
@@ -15,49 +17,20 @@ namespace NoZ.Netz
     /// </summary>
     public abstract class NetzObject : MonoBehaviour
     {
+        private static Dictionary<Type, FieldInfo[]> _variableFieldsByType = new Dictionary<Type, FieldInfo[]>();
+
         internal const ulong FirstSpawnedObjectInstanceId = 1 << 24;
 
         [SerializeField] internal ulong _networkInstanceId = 0;
         [Tooltip("Optional string used to generate the prefab hash.  Set this if you have name collisions")]
         [SerializeField] string _prefabHashGenerator = null;
 
-        private NetzObjectState _state = NetzObjectState.Unknown;
+        private NetzVariable[] _variables = null;
 
-        public NetzObjectState state
-        {
-            get => _state;
-            set
-            {
-                // Deboucne
-                if (value == _state)
-                    return;
-
-                // Do not allow the dirty state to be set if the object is already marked as spawning
-                if (_state == NetzObjectState.Spawning && value == NetzObjectState.Dirty)
-                    return;
-
-                _state = value;
-
-                // If the object is spawning or dirty then make sure it is in the dirty list
-                if (_state == NetzObjectState.Spawning || _state == NetzObjectState.Dirty)
-                {
-                    // If there dirty node was never allocated then it cant be in the list already
-                    if (null == _dirtyNode)
-                        _dirtyNode = new LinkedListNode<NetzObject>(this);
-                    // If the dirty node is already in a list then we are good
-                    else if (_dirtyNode.List != null)
-                        return;
-
-                    // Add to the dirty list
-                    NetzObjectManager._dirtyObjects.AddLast(_dirtyNode);
-                }
-                // If the object is not dirty make sure it is not in the dirty list anymore
-                else if (_dirtyNode != null && _dirtyNode.List != null)
-                    NetzObjectManager._dirtyObjects.Remove(_dirtyNode);
-            }
-        }
+        internal uint _changedInSnapshot = 0;
 
         internal LinkedListNode<NetzObject> _dirtyNode;
+        internal LinkedListNode<NetzObject> _node;
 
         internal ulong prefabHash { get; set; }
 
@@ -75,6 +48,48 @@ namespace NoZ.Netz
         /// Identifier of the client that owns this object
         /// </summary>
         public uint ownerClientId { get; internal set; }
+
+        protected NetzObject()
+        {
+            _node = new LinkedListNode<NetzObject>(this);
+        }
+
+        /// <summary>
+        /// Return all fields on the object of NetzVariable type
+        /// </summary>
+        private static FieldInfo[] GetVariableFields(Type type)
+        {
+            if (!typeof(NetzObject).IsAssignableFrom(type))
+                return new FieldInfo[0];
+
+            if (_variableFieldsByType.TryGetValue(type, out var cachedFields))
+                return cachedFields;
+
+            var fields = new List<FieldInfo>();
+            for (var rtype = type; rtype != typeof(NetzObject); rtype = rtype.BaseType)
+                fields.AddRange(rtype.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Where(f => typeof(NetzVariable).IsAssignableFrom(f.FieldType)));
+
+            cachedFields = fields.ToArray();
+            _variableFieldsByType.Add(type, cachedFields);
+            return cachedFields;
+        }
+
+        private void Awake()
+        {
+            InitializeVariables();
+        }
+
+        private void InitializeVariables()
+        {
+            var fields = GetVariableFields(GetType());
+            _variables = new NetzVariable[fields.Length];
+            for (int i = 0; i < _variables.Length; i++)
+            {
+                var variable = _variables[i] = fields[i].GetValue(this) as NetzVariable;
+                variable._parent = this;
+            }
+        }
+
 
         /// <summary>
         /// Generate the object's prefab hash
@@ -104,10 +119,7 @@ namespace NoZ.Netz
             }
         }
 
-        /// <summary>
-        /// Marks the object as dirty to ensure its snapshot is rebuilt 
-        /// </summary>
-        public void SetDirty() => state = NetzObjectState.Dirty;
+        internal void MarkChanged() => NetzObjectManager.MarkChanged(this);
 
         /// <summary>
         /// Start that is run when the object is synchronized on the network
@@ -127,6 +139,37 @@ namespace NoZ.Netz
         /// </summary>
         /// <param name="reader">Stream to read from</param>
         protected internal abstract void ReadSnapshot(ref DataStreamReader reader);
+
+
+
+        internal void Write (ref DataStreamWriter writer)
+        {
+            if (null == _variables)
+                return;
+
+            // Write all variables.  We dont need to write a count since the count
+            // and order should match on the other side.
+            for(int i=0; i<_variables.Length; i++)
+                _variables[i].Write(ref writer);
+        }
+
+        internal void Read (ref DataStreamReader reader)
+        {
+            if (null == _variables)
+                return;
+
+            // Write all variables.  We dont need to write a count since the count
+            // and order should match on the other side.
+            for (int i = 0; i < _variables.Length; i++)
+                _variables[i].Read(ref reader);
+        }
+
+        /// <summary>
+        /// Called when a network variable changes in any way, including interpolation and extrapolation
+        /// </summary>
+        protected internal virtual void OnNetworkUpdate ()
+        {
+        }
     }
 }
 

@@ -13,18 +13,27 @@ namespace NoZ.Netz
     {
         internal static ulong _nextSpawnedObjectInstanceId = NetzConstants.SpawnedObjectInstanceId;
 
-        internal static readonly Dictionary<ulong, NetzObject> _objects = new Dictionary<ulong, NetzObject>();
+        /// <summary>
+        /// Dictionary of network id to object
+        /// </summary>
+        internal static readonly Dictionary<ulong, NetzObject> _objectsById = new Dictionary<ulong, NetzObject>();
 
-        internal static readonly LinkedList<NetzObject> _dirtyObjects = new LinkedList<NetzObject>();
+        /// <summary>
+        /// Linked list of all spawned objects
+        /// </summary>
+        internal static readonly LinkedList<NetzObject> _objects = new LinkedList<NetzObject>();
 
         public static bool TryGetObject (ulong networkInstanceId, out NetzObject obj) =>
-            _objects.TryGetValue(networkInstanceId, out obj);
+            _objectsById.TryGetValue(networkInstanceId, out obj);
 
         internal static void SpawnSceneObjects ()
         {
             var sceneObjects = Object.FindObjectsOfType<NetzObject>();
-            foreach (var obj in sceneObjects)
-                _objects.Add(obj.networkInstanceId, obj);
+            foreach (var netobj in sceneObjects)
+            {
+                _objectsById.Add(netobj.networkInstanceId, netobj);
+                _objects.AddFirst(netobj._node);
+            }
 
             foreach (var obj in sceneObjects)
                 obj.NetworkStart();
@@ -35,16 +44,21 @@ namespace NoZ.Netz
             if ((networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) != NetzConstants.CustomNetworkInstanceId)
                 throw new System.InvalidOperationException("Networking InstanceId must be a custom network instance id");
 
-            if(_objects.ContainsKey(networkInstanceId))
+            if(_objectsById.ContainsKey(networkInstanceId))
                 throw new System.InvalidOperationException("Custom network instance identifier is already in use");
 
             var gameObject = new GameObject();
             gameObject.transform.SetParent(parent);
             var t = gameObject.AddComponent<T>();
             t._networkInstanceId = networkInstanceId;
-            t.state = NetzObjectState.Spawned;
 
-            _objects.Add(networkInstanceId, t);
+            _objectsById.Add(networkInstanceId, t);
+            _objects.AddLast(t._node);
+
+            if(NetzServer.isCreated)
+                t._changedInSnapshot = NetzServer.instance.currentSnapshotId;
+
+            t.NetworkStart();
 
             return t;
         }
@@ -71,11 +85,12 @@ namespace NoZ.Netz
 
             netobj._networkInstanceId = _nextSpawnedObjectInstanceId++;
             netobj.prefabHash = prefab.prefabHash;
-            netobj.state = NetzObjectState.Spawning;
             netobj.ownerClientId = ownerClientId;
+            netobj._changedInSnapshot = NetzServer.instance.currentSnapshotId;
 
             // Track the object
-            _objects.Add(netobj._networkInstanceId, netobj);
+            _objectsById.Add(netobj._networkInstanceId, netobj);
+            _objects.AddFirst(netobj._node);
 
             netobj.NetworkStart();
 
@@ -96,7 +111,7 @@ namespace NoZ.Netz
             netobj.ownerClientId = ownerClientId;
 
             // Track the object
-            _objects.Add(netobj._networkInstanceId, netobj);
+            _objectsById.Add(netobj._networkInstanceId, netobj);
 
             netobj.NetworkStart();
 
@@ -114,15 +129,8 @@ namespace NoZ.Netz
             if (!NetzManager.instance.isServer)
                 return;
 
-            // Mark the object as despawned
-            netobj.state = NetzObjectState.Despawning;
-
-            // Add to the dirty list to make sure the object gets despawned
-            if (netobj._dirtyNode.List == null)
-                _dirtyObjects.AddLast(netobj._dirtyNode);
-
             // Remove from the tracked object list
-            _objects.Remove(netobj.networkInstanceId);
+            _objectsById.Remove(netobj.networkInstanceId);
 
             netobj.OnDespawn();
 
@@ -138,11 +146,24 @@ namespace NoZ.Netz
             if (!TryGetObject(networkInstanceId, out var netobj))
                 return;
 
-            _objects.Remove(networkInstanceId);
+            _objectsById.Remove(networkInstanceId);
 
             netobj.OnDespawn();
 
             Object.Destroy(netobj.gameObject);
+        }
+
+        internal static void MarkChanged (NetzObject netobj)
+        {
+            if (netobj._node.List == null)
+                return;
+
+            // Move the changed object to the front of the list
+            _objects.Remove(netobj._node);
+            _objects.AddFirst(netobj._node);
+
+            // Snapshot this object was changed in
+            netobj._changedInSnapshot = NetzServer.instance.currentSnapshotId;
         }
     }
 }

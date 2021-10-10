@@ -12,7 +12,6 @@ namespace NoZ.Netz
 {
     public unsafe class NetzClient
     {
-        private const float KeepAliveDuration = 10.0f;
 
         private class ConnectedPlayer
         {
@@ -27,7 +26,6 @@ namespace NoZ.Netz
         private NetworkPipeline _pipeline;
         private NetzPlayer _player;
         private string _scene;
-        private float _nextKeepAlive;
         private double _lastMessageSendTime;
         private double _lastMessageReceiveTime;
         private NetzMessageRouter<NetzClient> _router;
@@ -85,14 +83,12 @@ namespace NoZ.Netz
             _player = player;
             _driver = NetworkDriver.Create(new FragmentationUtility.Parameters { PayloadCapacity = NetzConstants.MaxMessageSize });
             _pipeline = _driver.CreatePipeline(typeof(FragmentationPipelineStage));
-            _nextKeepAlive = KeepAliveDuration;
             state = NetzClientState.Connecting;
 
             _router = new NetzMessageRouter<NetzClient>();
             _router.AddRoute(NetzConstants.Messages.Connect, OnConnectMessage);
-            _router.AddRoute(NetzConstants.Messages.Disconnect, OnDisconnectMessage);
             _router.AddRoute(NetzConstants.Messages.Spawn, OnSpawnMessage);
-            _router.AddRoute(NetzConstants.Messages.ClientStates, OnClientStates);
+            //_router.AddRoute(NetzConstants.Messages.ClientStates, OnClientStates);
             _router.AddRoute(NetzConstants.Messages.Synchronize, OnSynchronizeMessage);
             _router.AddRoute(NetzConstants.Messages.Snapshot, OnSnapshotMessage);
         }
@@ -147,7 +143,8 @@ namespace NoZ.Netz
             // Issue a disconnect to the server
             if (_connection.IsCreated)
             {
-                _connection.Disconnect(_driver);
+                _driver.Disconnect(_connection);
+                _driver.ScheduleUpdate().Complete();
                 _connection = default(NetworkConnection);
             }
 
@@ -163,7 +160,10 @@ namespace NoZ.Netz
         internal void Update()
         {
             if (!_driver.IsCreated)
+            {
+                Disconnect();
                 return;
+            }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (_debugger != null)
@@ -173,7 +173,10 @@ namespace NoZ.Netz
             _driver.ScheduleUpdate().Complete();
 
             if (!_connection.IsCreated)
+            {
+                Disconnect();
                 return;
+            }
 
             SendKeepAlive();
 
@@ -202,13 +205,11 @@ namespace NoZ.Netz
             {
                 case NetzClientState.Synchronizing: UpdateStateSynchronizing(); break;
                 case NetzClientState.Synchronized: UpdateStateSynchronized(); break;
-                case NetzClientState.Disconnecting: UpdateStateDisconnecting(); break;
             }
         }
 
         private void UpdateStateSynchronizing()
         {
-            // TODO: send keepalive
         }
 
         private void UpdateStateSynchronized()
@@ -222,11 +223,6 @@ namespace NoZ.Netz
             {
                 SendToServer(msg);
             }
-        }
-
-        private void UpdateStateDisconnecting()
-        {
-
         }
 
         private void ReadMessage(DataStreamReader reader)
@@ -276,11 +272,6 @@ namespace NoZ.Netz
 
             // Raise player connected event for ourself
             onPlayerConnected?.Invoke(_player);
-        }
-
-        private void OnDisconnectMessage(FourCC messageType, NetzClient target, ref DataStreamReader reader)
-        {
-            state = NetzClientState.Disconnected;
         }
 
         /// <summary>
@@ -360,9 +351,25 @@ namespace NoZ.Netz
             if (state == NetzClientState.Synchronized)
                 state = NetzClientState.Active;
 
-            SendKeepAlive();
+            var snapshotId = reader.ReadUInt();
+
+            while(true)
+            {
+                var netobjId = reader.ReadULong();
+                if (netobjId == 0)
+                    break;
+
+                if(!NetzObjectManager.TryGetObject(netobjId, out var netobj))
+                {
+                    // TODO: how do we skip this?  Do we need a size?
+                }
+
+                netobj.Read(ref reader);
+                netobj.OnNetworkUpdate();
+            }
         }
 
+#if false
         /// <summary>
         /// Handles incoming client state changes
         /// </summary>
@@ -394,17 +401,17 @@ namespace NoZ.Netz
                     NetzManager.instance.RaiseClientStateChanged(connectedClient.id, oldState, connectedClient.state);
                 }
         }
+#endif
 
         /// <summary>
         /// Send a keep alive message to the server to ensure that the connection isnt closed.
         /// </summary>
         private void SendKeepAlive()
         {
-            if (state != NetzClientState.Connected)
+            if (state == NetzClientState.Connecting)
                 return;
 
-            _nextKeepAlive -= Time.deltaTime;
-            if (_nextKeepAlive > 0.0f)
+            if (timeSinceLastMessageSent < NetzConstants.KeepAliveInterval)
                 return;
 
             using (var message = NetzMessage.Create(null, NetzConstants.Messages.KeepAlive))
@@ -428,9 +435,6 @@ namespace NoZ.Netz
             _driver.BeginSend(_pipeline, connection, out var clientWriter);
             clientWriter.WriteBytes(message.buffer, message.length);
             _driver.EndSend(clientWriter);
-
-            // Since we sent a message we can reset the keep alive
-            _nextKeepAlive = KeepAliveDuration;
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
