@@ -28,6 +28,8 @@ namespace NoZ.Netz
         /// </summary>
         public void WriteFloat(float value) => _writer.WritePackedFloat(value, NetzConstants.CompressionModel);
 
+        public void WriteFloatDelta(float value, float baseline) => _writer.WritePackedFloatDelta(value, baseline, NetzConstants.CompressionModel);
+
         public void WriteUShort(ushort value) => _writer.WriteUShort(value);
 
         public void WriteULong(ulong value) => _writer.WritePackedULong(value, NetzConstants.CompressionModel);

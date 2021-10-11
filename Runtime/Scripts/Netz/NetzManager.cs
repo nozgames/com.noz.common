@@ -31,6 +31,12 @@ namespace NoZ.Netz
             base.OnInitialize();
 
             InitializePrefabs();
+
+            // Create an object to manage server time.
+            var go = new GameObject();
+            go.transform.SetParent(transform);
+            go.hideFlags = HideFlags.HideAndDontSave;
+            go.AddComponent<NetzTimeUpdater>();
         }
 
         private void InitializePrefabs ()
@@ -128,11 +134,15 @@ namespace NoZ.Netz
 
         private void Update()
         {
-            if (NetzServer.instance != null)
-                NetzServer.instance.Update();
-
             if (NetzClient.instance != null)
                 NetzClient.instance.Update();
+        }
+
+        private void FixedUpdate()
+        {
+            // Update the server on a fixed interval
+            if (NetzServer.instance != null)
+                NetzServer.instance.Update();
         }
 
         internal void RaiseClientStateChanged (uint clientId, NetzClientState oldState, NetzClientState newState)

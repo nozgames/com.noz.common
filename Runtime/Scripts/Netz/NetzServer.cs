@@ -33,6 +33,7 @@ namespace NoZ.Netz
             public ReliableEventQueueWriter eventWriter;
             public ReliableEventQueueReader eventReader;
             public uint synchronizEventId;
+            public float lastSnapshotTime;
 
             public double timeSinceLastMessageSent => Time.realtimeSinceStartupAsDouble - lastMessageSendTime;
             public double timeSinceLastMessageReceived => Time.realtimeSinceStartupAsDouble - lastMessageReceiveTime;
@@ -257,7 +258,6 @@ namespace NoZ.Netz
             while (client.eventReader.count > 0)
             {
                 var evt = client.eventReader.Dequeue();
-                var evtreader = evt.GetReader();
 
                 // Global tag?
                 if (evt.target == 0)
@@ -313,11 +313,6 @@ namespace NoZ.Netz
             client.eventWriter.EndEnqueue(writer);
         }
 
-        internal void FixedUpdate ()
-        {
-            _snapshotId++;
-        }
-        
         internal void Update ()
         {
             _driver.ScheduleUpdate().Complete();
@@ -331,7 +326,8 @@ namespace NoZ.Netz
                 for (int i = _clients.Count - 1; i >= 0; i--)
                 {
                     var client = _clients[i];
-                    if(client.state == NetzClientState.Active)
+                    // TODO: should specific events have flags so we know which to send to the server?
+                    if(client.state == NetzClientState.Active && !client.player.isHost)
                         client.eventWriter.Enqueue(_events);
                 }
 
@@ -366,21 +362,33 @@ namespace NoZ.Netz
             client.eventReader.Read(ref reader);
         }
 
+        private NetzWriter BeginSend (ConnectedClient client)
+        {
+            _driver.BeginSend(client.connection, out var writer);
+            return new NetzWriter(writer);
+        }
+
+        private void EndSend(NetzWriter writer) =>
+            _driver.EndSend(writer._writer);
+
+
         /// <summary>
         /// Write a new snapshot to the client
         /// </summary>
         /// <param name="client"></param>
         private void WriteSnapshot (ConnectedClient client)
         {
-            _driver.BeginSend(client.connection, out var writer);
+            var writer = BeginSend(client);
+            writer.WriteFloatDelta(Time.time, client.lastSnapshotTime);
+            client.lastSnapshotTime = Time.time;
 
             // Write the last processed incoming event so the client will stop sending it
             writer.WriteUInt(client.eventReader.lastDequeuedSequenceId);
 
             // Write the outgoing events
-            client.eventWriter.Write(ref writer);
+            client.eventWriter.Write(ref writer._writer);
 
-            _driver.EndSend(writer);
+            EndSend(writer);
 
             client.lastMessageSendTime = Time.realtimeSinceStartupAsDouble;
         }

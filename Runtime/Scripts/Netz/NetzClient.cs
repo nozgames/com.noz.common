@@ -30,6 +30,7 @@ namespace NoZ.Netz
         private ReliableEventQueueWriter _eventWriter;
         private ReliableEventQueueReader _eventReader;
         private Dictionary<uint, ConnectedPlayer> _connectedClients = new Dictionary<uint, ConnectedPlayer>();
+        internal float _serverTimeDelta;
 
         public static NetzClient instance { get; private set; }
         public static bool isCreated => instance != null;
@@ -62,6 +63,8 @@ namespace NoZ.Netz
         /// </summary>
         public bool isConnected => id != 0;
 
+        public float interpolation { get; private set; }
+
         /// <summary>
         /// Last snapshot number that was sent to the client
         /// </summary>
@@ -85,7 +88,7 @@ namespace NoZ.Netz
             _eventReader = new ReliableEventQueueReader(NetzConstants.MaxReliableEvents, NetzConstants.ReliableEventBufferSize);;
         }
 
-    public static void Connect(NetworkEndPoint endpoint, NetzPlayer player)
+        public static void Connect(NetworkEndPoint endpoint, NetzPlayer player)
         {
             if (instance != null)
                 throw new InvalidOperationException("Only one client can be connected at a time");
@@ -170,7 +173,7 @@ namespace NoZ.Netz
                         break;
 
                     case NetworkEvent.Type.Data:
-                        ReadSnapshot(stream);
+                        ReadSnapshot(new NetzReader(stream));
                         break;
 
                     case NetworkEvent.Type.Disconnect:
@@ -223,14 +226,43 @@ namespace NoZ.Netz
             _lastMessageSendTime = Time.realtimeSinceStartupAsDouble;
         }
 
-        private void ReadSnapshot(DataStreamReader reader)
+        private void AdjustTimeDelta ()
         {
+            // If this was the first snapshot then set the time delta
+            if (NetzTime.lastSnapshotTime <= 0.0f)
+            {
+                _serverTimeDelta = NetzTime.snapshotTime - Time.time;
+                return;
+            }
+
+            var newDelta = Time.time - NetzTime.snapshotTime;
+            var deltaDelta = Mathf.Abs(newDelta - _serverTimeDelta);
+
+            if (deltaDelta > 500)
+                _serverTimeDelta = newDelta;
+            else if (deltaDelta > 100)
+                _serverTimeDelta = (newDelta + _serverTimeDelta) * 0.5f;
+            else if (newDelta > _serverTimeDelta)
+                _serverTimeDelta += 0.001f;
+            else if (newDelta < _serverTimeDelta)
+                _serverTimeDelta -= 0.001f;
+        }
+
+        private void ReadSnapshot(NetzReader reader)
+        {
+            // Update the global time.
+            NetzTime.lastSnapshotTime = NetzTime.snapshotTime;
+            NetzTime.snapshotTime = reader.ReadFloatDelta(NetzTime.lastSnapshotTime);
+
+            // Adjust the delta time 
+            AdjustTimeDelta();
+
             // Remove all events from the outgoing queue that the server has seen
             var lastDequeuedOutgoingEventId = reader.ReadUInt();
             _eventWriter.Acknowledge(lastDequeuedOutgoingEventId);
 
             // Read all incoming events
-            _eventReader.Read(ref reader);
+            _eventReader.Read(ref reader._reader);
         }
 
         private void Synchronize (NetzReader reader)

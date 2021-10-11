@@ -25,6 +25,8 @@ namespace NoZ.Netz
         /// <returns></returns>
         public float ReadFloat() => _reader.ReadPackedFloat(NetzConstants.CompressionModel);
 
+        public float ReadFloatDelta(float baseline) => _reader.ReadPackedFloatDelta(baseline, NetzConstants.CompressionModel);
+
         public ulong ReadULong() => _reader.ReadPackedULong(NetzConstants.CompressionModel);
 
         public ulong ReadULongDelta(ulong baseline) => _reader.ReadPackedULongDelta(baseline, NetzConstants.CompressionModel);
