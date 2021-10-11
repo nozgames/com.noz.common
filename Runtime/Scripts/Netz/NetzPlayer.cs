@@ -1,6 +1,4 @@
-using Unity.Networking.Transport;
-
-namespace NoZ
+namespace NoZ.Netz
 {
     public abstract class NetzPlayer
     {
@@ -12,8 +10,8 @@ namespace NoZ
 
         public bool isConnected { get; internal set; }
 
-        public abstract void Serialize(ref DataStreamWriter writer);
+        public abstract void Write(ref NetzWriter writer);
 
-        public abstract void Deserialize(ref DataStreamReader reader);
+        public abstract void Read(ref NetzReader reader);
     }
 }

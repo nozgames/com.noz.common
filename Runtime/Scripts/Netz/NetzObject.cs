@@ -25,11 +25,14 @@ namespace NoZ.Netz
         [Tooltip("Optional string used to generate the prefab hash.  Set this if you have name collisions")]
         [SerializeField] string _prefabHashGenerator = null;
 
-        private NetzVariable[] _variables = null;
-
+        /// <summary>
+        /// Snapshot the object was last changed in
+        /// </summary>
         internal uint _changedInSnapshot = 0;
 
-        internal LinkedListNode<NetzObject> _dirtyNode;
+        /// <summary>
+        /// Node that links this object into global list of network objects
+        /// </summary>
         internal LinkedListNode<NetzObject> _node;
 
         internal ulong prefabHash { get; set; }
@@ -37,7 +40,7 @@ namespace NoZ.Netz
         public ulong networkInstanceId => _networkInstanceId;
 
         public bool isClient => NetzManager.instance.isClient;
-        public bool isServer => NetzManager.instance.isServer;
+        public bool isServer => NetzManager.instance.isServerOrHost;
         public bool isSceneObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == 0;
         public bool isCustomObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == NetzConstants.CustomNetworkInstanceId;
         public bool isSpawnedObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == NetzConstants.SpawnedObjectInstanceId;
@@ -55,43 +58,6 @@ namespace NoZ.Netz
         }
 
         /// <summary>
-        /// Return all fields on the object of NetzVariable type
-        /// </summary>
-        private static FieldInfo[] GetVariableFields(Type type)
-        {
-            if (!typeof(NetzObject).IsAssignableFrom(type))
-                return new FieldInfo[0];
-
-            if (_variableFieldsByType.TryGetValue(type, out var cachedFields))
-                return cachedFields;
-
-            var fields = new List<FieldInfo>();
-            for (var rtype = type; rtype != typeof(NetzObject); rtype = rtype.BaseType)
-                fields.AddRange(rtype.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Where(f => typeof(NetzVariable).IsAssignableFrom(f.FieldType)));
-
-            cachedFields = fields.ToArray();
-            _variableFieldsByType.Add(type, cachedFields);
-            return cachedFields;
-        }
-
-        private void Awake()
-        {
-            InitializeVariables();
-        }
-
-        private void InitializeVariables()
-        {
-            var fields = GetVariableFields(GetType());
-            _variables = new NetzVariable[fields.Length];
-            for (int i = 0; i < _variables.Length; i++)
-            {
-                var variable = _variables[i] = fields[i].GetValue(this) as NetzVariable;
-                variable._parent = this;
-            }
-        }
-
-
-        /// <summary>
         /// Generate the object's prefab hash
         /// </summary>
         /// <returns>Generated prefab hash</returns>
@@ -102,72 +68,59 @@ namespace NoZ.Netz
         }
 
         /// <summary>
-        /// Handle an incoming message sent to this object
-        /// </summary>
-        /// <param name="messageId">Message identifier</param>
-        /// <param name="reader">Stream reader containing the data</param>
-        internal void HandleMessage (FourCC messageId, ref DataStreamReader reader)
-        {
-            if(messageId == NetzConstants.Messages.Snapshot)
-            {
-                ReadSnapshot(ref reader);
-                return;
-            }
-            else if (messageId == NetzConstants.Messages.Despawn)
-            {
-                NetzObjectManager.DespawnOnClient(networkInstanceId);
-            }
-        }
-
-        internal void MarkChanged() => NetzObjectManager.MarkChanged(this);
-
-        /// <summary>
         /// Start that is run when the object is synchronized on the network
         /// </summary>
         protected internal virtual void NetworkStart () { }
 
         protected internal virtual void OnDespawn() { }
 
-        /// <summary>
-        /// Write the objects snapshot to the given stream
-        /// </summary>
-        /// <param name="writer">Stream to write to</param>
-        protected internal abstract void WriteSnapshot(ref DataStreamWriter writer);
+        protected internal virtual void OnNetworkUpdate () { }
 
         /// <summary>
-        /// Read the object's snapshot from the given stream
+        /// Send the object's entire state to the client
         /// </summary>
-        /// <param name="reader">Stream to read from</param>
-        protected internal abstract void ReadSnapshot(ref DataStreamReader reader);
-
-
-
-        internal void Write (ref DataStreamWriter writer)
+        public void SendToClient ()
         {
-            if (null == _variables)
-                return;
-
-            // Write all variables.  We dont need to write a count since the count
-            // and order should match on the other side.
-            for(int i=0; i<_variables.Length; i++)
-                _variables[i].Write(ref writer);
-        }
-
-        internal void Read (ref DataStreamReader reader)
-        {
-            if (null == _variables)
-                return;
-
-            // Write all variables.  We dont need to write a count since the count
-            // and order should match on the other side.
-            for (int i = 0; i < _variables.Length; i++)
-                _variables[i].Read(ref reader);
+            var writer = NetzServer.instance.BeginSendEvent(this, 0);
+            Write(ref writer);
+            NetzServer.instance.EndSendEvent(writer);
         }
 
         /// <summary>
-        /// Called when a network variable changes in any way, including interpolation and extrapolation
+        /// Send a dataless event
         /// </summary>
-        protected internal virtual void OnNetworkUpdate ()
+        /// <param name="tag">Event tag</param>
+        public void SendEventToClient (ushort tag)
+        {
+            NetzServer.instance.EndSendEvent(NetzServer.instance.BeginSendEvent(this, tag));
+        }
+
+        public NetzWriter BeginSendEventToClient (ushort tag)
+        {
+            if (!NetzServer.isCreated)
+                throw new InvalidOperationException("BeginSendEventToClient must be called on a server");
+
+            return NetzServer.instance.BeginSendEvent(this, tag);
+        }
+
+        public void EndSendEvent (NetzWriter writer)
+        {
+
+        }
+
+        internal void ReadEvent (ushort tag, ref NetzReader reader)
+        {
+            if (tag == 0)
+                Read(ref reader);
+            else
+                OnMessage(tag, ref reader);
+        }
+
+        public abstract void Read(ref NetzReader reader);
+
+        public abstract void Write(ref NetzWriter writer);
+
+        protected internal virtual void OnMessage (ushort tag, ref NetzReader reader)
         {
         }
     }

@@ -1,9 +1,13 @@
 #if UNITY_COLLECTIONS && UNITY_TRANSPORT
 
+using Unity.Networking.Transport;
+
 namespace NoZ.Netz
 {
     public static class NetzConstants
     {
+        public static readonly NetworkCompressionModel CompressionModel = new NetworkCompressionModel(Unity.Collections.Allocator.Persistent);
+
         /// <summary>
         /// First object instance identifier for scene objects
         /// </summary>
@@ -50,44 +54,17 @@ namespace NoZ.Netz
         /// </summary>
         internal const int MaxMessageSize = 4096;
 
-        public static class Messages
+
+        internal const int MaxReliableEvents = 1024;
+        internal const int ReliableEventBufferSize = 8192;
+
+        internal static class GlobalTag 
         {
-            /// <summary>
-            /// Connection message
-            /// </summary>
-            public static readonly FourCC Connect = new FourCC('C', 'O', 'N', 'N');
+            public const ushort Connect = 1;
 
-            /// <summary>
-            /// Message sent by clients periodically to keep the connection alive
-            /// </summary>
-            public static readonly FourCC KeepAlive = new FourCC('K', 'E', 'E', 'P');
+            public const ushort Synchronize = 2;
 
-            /// <summary>
-            /// Object snapshot
-            /// </summary>
-            public static readonly FourCC Snapshot = new FourCC('S', 'N', 'A', 'P');
-
-            /// <summary>
-            /// Send to spawn an object on the clients
-            /// </summary>
-            public static readonly FourCC Spawn = new FourCC('S', 'P', 'W', 'N');
-
-
-            /// <summary>
-            /// Sent to Despawn an object on the client
-            /// </summary>
-            public static readonly FourCC Despawn = new FourCC('D', 'S', 'P', 'N');
-
-
-            /// <summary>
-            /// Debug message for debugger
-            /// </summary>
-            public static readonly FourCC Debug = new FourCC('D', 'B', 'U', 'G');
-
-            /// <summary>
-            /// Synchronize a client with he server
-            /// </summary>
-            public static readonly FourCC Synchronize = new FourCC('S', 'Y', 'N', 'C');
+            public const ushort LoadScene = 3;
         }
     }
 }

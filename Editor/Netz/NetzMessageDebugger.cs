@@ -16,6 +16,7 @@ namespace NoZ
 {
     public class NetzMessageDebugger : EditorWindow
     {
+#if false
         private const int MaxMessageCount = 4096;
 
         [Serializable]
@@ -492,6 +493,7 @@ namespace NoZ
             _messageCount = 0;
             Repaint();
         }
+#endif
     }
 }
 

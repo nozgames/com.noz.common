@@ -10,6 +10,7 @@ namespace NoZ.Netz
     public unsafe class NetzManager : Singleton<NetzManager>
     {
         [SerializeField] internal int _updateRate = 20;
+        [SerializeField] internal int _clientUpdateRate = 20;
         [SerializeField] private NetzObject[] _prefabs = null;
 
         private Dictionary<ulong, NetzObject> _prefabsByHash;
@@ -22,6 +23,8 @@ namespace NoZ.Netz
         public event ServerStateChangedEvent onServerStateChanged;
 
         public event ClientStateChangeEvent onClientStateChanged;
+
+        public double clientUpdateInterval => 1.0 / _clientUpdateRate;
 
         protected override void OnInitialize()
         {
@@ -68,8 +71,6 @@ namespace NoZ.Netz
 
             Debug.Assert(NetzClient.instance == null);
             Debug.Assert(NetzServer.instance == null);
-
-            NetzMessage.Shutdown();
         }
 
 #if false

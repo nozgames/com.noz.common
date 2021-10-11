@@ -17,14 +17,14 @@ namespace NoZ.Netz
         Connected,
 
         /// <summary>
+        /// Client is loading the scene
+        /// </summary>
+        LoadingScene,
+
+        /// <summary>
         /// Client is synchronizing state with the server
         /// </summary>
         Synchronizing,
-
-        /// <summary>
-        /// Client is synchronized and waiting for the server to send snapshots
-        /// </summary>
-        Synchronized,
 
         /// <summary>
         /// Client is synchronized and active in the world
