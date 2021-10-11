@@ -26,7 +26,7 @@ namespace NoZ.Netz
         /// <summary>
         /// Write a floating point value to the stream
         /// </summary>
-        public void WriteFloat(float value) => _writer.WritePackedFloat(value, NetzConstants.CompressionModel);
+        public void WriteFloat(float value) => _writer.WriteFloat(value); //_writer.WritePackedFloat(value, NetzConstants.CompressionModel);
 
         public void WriteFloatDelta(float value, float baseline) => _writer.WritePackedFloatDelta(value, baseline, NetzConstants.CompressionModel);
 

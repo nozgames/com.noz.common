@@ -23,7 +23,7 @@ namespace NoZ.Netz
         /// Read a floating point value from the stream
         /// </summary>
         /// <returns></returns>
-        public float ReadFloat() => _reader.ReadPackedFloat(NetzConstants.CompressionModel);
+        public float ReadFloat() => _reader.ReadFloat(); //_reader.ReadPackedFloat(NetzConstants.CompressionModel);
 
         public float ReadFloatDelta(float baseline) => _reader.ReadPackedFloatDelta(baseline, NetzConstants.CompressionModel);
 

@@ -147,6 +147,8 @@ namespace NoZ.Netz
             instance = null;
         }
 
+        private static int _dequeueLast = 0;
+
         internal void Update()
         {
             if (!_driver.IsCreated)
@@ -188,8 +190,15 @@ namespace NoZ.Netz
             // Process all incoming events
             while(_eventReader.count > 0)
             {
+                if(_eventReader.Peek().sequenceId <= _dequeueLast)
+                {
+                    Debug.LogError("Double dequeue?");
+                }
+
                 var evt = _eventReader.Dequeue();
                 var evtreader = evt.GetReader();
+
+                _dequeueLast = (int)evt.sequenceId;
 
                 if(evt.target != 0)
                 {
@@ -235,7 +244,7 @@ namespace NoZ.Netz
                 return;
             }
 
-            var newDelta = Time.time - NetzTime.snapshotTime;
+            var newDelta = NetzTime.snapshotTime - Time.time;
             var deltaDelta = Mathf.Abs(newDelta - _serverTimeDelta);
 
             if (deltaDelta > 500)
@@ -252,7 +261,7 @@ namespace NoZ.Netz
         {
             // Update the global time.
             NetzTime.lastSnapshotTime = NetzTime.snapshotTime;
-            NetzTime.snapshotTime = reader.ReadFloatDelta(NetzTime.lastSnapshotTime);
+            NetzTime.snapshotTime = reader.ReadFloat();
 
             // Adjust the delta time 
             AdjustTimeDelta();

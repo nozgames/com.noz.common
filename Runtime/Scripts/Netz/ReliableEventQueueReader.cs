@@ -97,9 +97,9 @@ namespace NoZ.Netz
             _bufferSeek = 0;
 
             // Skip all events we have already read.
-            for(int i=0; i<_count; i++)
+            while(_count > 0)
             {
-                var evtinfo = GetEventInfo(_head + i);
+                var evtinfo = GetEventInfo(_head);
                 if (evtinfo.id > _lastDequeuedSequenceId)
                     break;
 

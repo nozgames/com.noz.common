@@ -278,10 +278,10 @@ namespace NoZ.Netz
 
 
             // Send snapshot to the client 
-            if(client.timeSinceLastMessageSent >= _snapshotInterval)
-            {
+//            if(client.timeSinceLastMessageSent >= _snapshotInterval)
+//            {
                 WriteSnapshot(client);
-            }
+  //          }
         }
 
         private void SendLoadSceneToClient (ConnectedClient client)
@@ -379,7 +379,8 @@ namespace NoZ.Netz
         private void WriteSnapshot (ConnectedClient client)
         {
             var writer = BeginSend(client);
-            writer.WriteFloatDelta(Time.time, client.lastSnapshotTime);
+            writer.WriteFloat(Time.time);
+            Debug.Log($"WriteSnapshot: t={Time.time}");
             client.lastSnapshotTime = Time.time;
 
             // Write the last processed incoming event so the client will stop sending it

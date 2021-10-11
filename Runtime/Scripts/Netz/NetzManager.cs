@@ -7,6 +7,7 @@ using System.Collections.Generic;
 
 namespace NoZ.Netz
 {
+    [DefaultExecutionOrder(int.MaxValue)]
     public unsafe class NetzManager : Singleton<NetzManager>
     {
         [SerializeField] internal int _updateRate = 20;
