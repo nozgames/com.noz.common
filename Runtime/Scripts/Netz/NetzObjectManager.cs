@@ -71,7 +71,7 @@ namespace NoZ.Netz
         public static NetzObject Spawn (NetzObject prefab, NetzObject parent, uint ownerClientId)
         {
             // TODO: if this is the client we have to send a message to the server to spawn the object
-            if (!NetzManager.instance.isServer)
+            if (!NetzServer.isCreated)
                 return null;
 
             // Instantiate the actual game object
@@ -94,10 +94,12 @@ namespace NoZ.Netz
 
             netobj.NetworkStart();
 
+            NetzServer.instance.SendSpawnEvent(netobj);
+
             return netobj;
         }
 
-        internal static NetzObject SpawnOnClient(ulong prefabHash, uint ownerClientId, ulong networkInstanceId)
+        internal static NetzObject SpawnOnClient(ulong prefabHash, uint ownerClientId, ulong networkInstanceId, ref NetzReader reader)
         {
             if (!NetzManager.instance.TryGetPrefab(prefabHash, out var prefab))
             {
@@ -112,6 +114,9 @@ namespace NoZ.Netz
 
             // Track the object
             _objectsById.Add(netobj._networkInstanceId, netobj);
+            _objects.AddFirst(netobj._node);
+
+            netobj.Read(ref reader);
 
             netobj.NetworkStart();
 
@@ -126,27 +131,33 @@ namespace NoZ.Netz
         public static void Despawn (NetzObject netobj)
         {
             // Despawn must be called on the server
-            if (!NetzManager.instance.isServer)
+            if (!NetzServer.isCreated)
                 return;
 
             // Remove from the tracked object list
             _objectsById.Remove(netobj.networkInstanceId);
+            _objects.Remove(netobj._node);
 
             netobj.OnDespawn();
 
-            // Disable the object so it does not think until it can be despawned
-            netobj.gameObject.SetActive(false);
+            // TODO: if this is a scene object we need to track the destroy
+
+            NetzServer.instance.SendDespawnEvent(netobj);
+
+            // Destroy the game object
+            Object.Destroy(netobj.gameObject);
         }
 
         internal static void DespawnOnClient (ulong networkInstanceId)
         {
-            if (!NetzManager.instance.isClient || NetzManager.instance.isHost)
+            if (!NetzServer.isCreated && NetzServer.isCreated)
                 return;
 
             if (!TryGetObject(networkInstanceId, out var netobj))
                 return;
 
             _objectsById.Remove(networkInstanceId);
+            _objects.Remove(netobj._node);
 
             netobj.OnDespawn();
 

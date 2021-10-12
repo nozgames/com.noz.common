@@ -1,4 +1,5 @@
 using Unity.Networking.Transport;
+using UnityEngine;
 
 namespace NoZ.Netz
 {
@@ -34,5 +35,13 @@ namespace NoZ.Netz
         public uint ReadUInt() => _reader.ReadPackedUInt(NetzConstants.CompressionModel);
 
         public string ReadFixedString32() => _reader.ReadFixedString32().Value;
+
+        public byte ReadByte() => _reader.ReadByte();
+
+        public bool ReadBit () => _reader.ReadRawBits(1) == 1;
+
+        public Vector3 ReadVector3() => new Vector3(ReadFloat(), ReadFloat(), ReadFloat());
+
+        public Quaternion ReadQuaternion() => new Quaternion(ReadFloat(), ReadFloat(), ReadFloat(), ReadFloat());
     }
 }

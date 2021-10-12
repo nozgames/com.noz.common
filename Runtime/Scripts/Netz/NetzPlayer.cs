@@ -2,7 +2,7 @@ namespace NoZ.Netz
 {
     public abstract class NetzPlayer
     {
-        public int id { get; internal set; }
+        public uint id { get; internal set; }
 
         public bool isLocal { get; internal set; }
 

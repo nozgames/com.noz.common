@@ -1,4 +1,5 @@
 using Unity.Networking.Transport;
+using UnityEngine;
 
 namespace NoZ.Netz
 {
@@ -37,5 +38,24 @@ namespace NoZ.Netz
         public void WriteULongDelta(ulong value, ulong baseline) => _writer.WritePackedULongDelta(value, baseline, NetzConstants.CompressionModel);
 
         public void WriteUInt(uint value) => _writer.WritePackedUInt(value, NetzConstants.CompressionModel);
+
+        public void WriteByte(byte value) => _writer.WriteByte(value);
+
+        public void WriteBit(bool value) => _writer.WriteRawBits(value ? 1U : 0U, 1);
+
+        public void WriteVector3(Vector3 value)
+        {
+            _writer.WriteFloat(value.x);
+            _writer.WriteFloat(value.y);
+            _writer.WriteFloat(value.z);
+        }
+
+        public void WriteQuaternion(Quaternion value)
+        {
+            _writer.WriteFloat(value.x);
+            _writer.WriteFloat(value.y);
+            _writer.WriteFloat(value.z);
+            _writer.WriteFloat(value.w);
+        }
     }
 }

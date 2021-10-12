@@ -32,12 +32,14 @@ namespace NoZ.Netz
             public NetzPlayer player;
             public ReliableEventQueueWriter eventWriter;
             public ReliableEventQueueReader eventReader;
-            public uint synchronizEventId;
             public float lastSnapshotTime;
 
             public double timeSinceLastMessageSent => Time.realtimeSinceStartupAsDouble - lastMessageSendTime;
             public double timeSinceLastMessageReceived => Time.realtimeSinceStartupAsDouble - lastMessageReceiveTime;
         }
+
+        public static event Action<NetzPlayer> onPlayerConnected;
+        public static event Action<NetzPlayer> onPlayerDisconnected;
 
         private NetworkEndPoint _endpoint;
         private NetworkDriver _driver;
@@ -65,17 +67,15 @@ namespace NoZ.Netz
         /// </summary>
         public static bool isCreated => instance != null;
 
-        /// <summary>
-        /// Number of clients connected to the server
-        /// </summary>
-        public int clientCount => _clients.Count;
-
         public NetzServerState state => _state;
 
         public int MaxClients { get; set; } = 16;
 
         public ushort port => _endpoint.Port;
 
+        /// <summary>
+        /// Number of players connected to the server
+        /// </summary>
         public int playerCount => _clients.Count;
 
         public uint currentSnapshotId => _snapshotId;
@@ -92,11 +92,6 @@ namespace NoZ.Netz
             _clients = new List<ConnectedClient>(16);
             _driver = NetworkDriver.Create(new FragmentationUtility.Parameters { PayloadCapacity = NetzConstants.MaxMessageSize });
             _pipeline = _driver.CreatePipeline(typeof(FragmentationPipelineStage));
-
-            // Initialize the message router
-            //_router.AddRoute(NetzConstants.Messages.Connect, OnClientConnectAck);
-            //_router.AddRoute(NetzConstants.Messages.Synchronize, OnSynchronizeAck);
-            //_router.AddRoute(NetzConstants.Messages.Snapshot, OnSnapshot);
 
             _endpoint = NetworkEndPoint.LoopbackIpv4;
             _endpoint.Port = port;
@@ -159,10 +154,23 @@ namespace NoZ.Netz
             NetzManager.instance.RaiseServerStateChanged(old, state);
         }
 
-        public NetzPlayer GetPlayer(int index) => _clients[index].player;
+        /// <summary>
+        /// Return the player at the given index
+        /// </summary>
+        /// <param name="index">Index of the player</param>
+        /// <returns>Player</returns>
+        public NetzPlayer GetPlayerAt (int index) => _clients[index].player;
+
+        /// <summary>
+        /// Return the player at the given index
+        /// </summary>
+        /// <typeparam name="T">Player Info Type</typeparam>
+        /// <param name="index">Index of the player</param>
+        /// <returns>Player</returns>
+        public T GetPlayerAt<T>(int index) where T : NetzPlayer => _clients[index].player as T;
+
         public NetzClientState GetClientState(int index) => _clients[index].state;
 
-        public T GetPlayer<T>(int index) where T : NetzPlayer => _clients[index].player as T;
 
         /// <summary>
         /// Send disconnect message to a connection with an optional reason for the disconnect
@@ -181,6 +189,9 @@ namespace NoZ.Netz
         /// <param name="reason"></param>
         private void Disconnect(ConnectedClient client, NetzDisconnectReason reason = NetzDisconnectReason.Unknown)
         {
+            // Send a disconnect to all other clients
+            SendPlayerDisconnectEvent(client);
+
             _clients.Remove(client);
 
             // Send a disconnect message as long as the client is still connected.
@@ -189,6 +200,8 @@ namespace NoZ.Netz
 
             client.eventWriter.Dispose();
             client.eventReader.Dispose();
+
+            onPlayerDisconnected?.Invoke(client.player);
         }
 
         /// <summary>
@@ -224,7 +237,19 @@ namespace NoZ.Netz
                 // Send the connect event to the client to assign it an identifier
                 var writer = client.eventWriter.BeginEnqueue(0, NetzConstants.GlobalTag.Connect);
                 writer.WriteUInt(client.id);
-                client.synchronizEventId = client.eventWriter.EndEnqueue(writer);
+
+                // Write all known clients
+                for(int i=0; i < _clients.Count; i++)
+                {
+                    if (_clients[i].state == NetzClientState.Connecting)
+                        continue;
+
+                    writer.WriteUInt(_clients[i].id);
+                    _clients[i].player.Write(ref writer);
+                }
+                writer.WriteUInt(0);
+
+                client.eventWriter.EndEnqueue(writer);
 
                 _clients.Add(client);
             }
@@ -265,16 +290,12 @@ namespace NoZ.Netz
                     switch(evt.tag)
                     {
                         case NetzConstants.GlobalTag.Connect: OnConnectEvent(client, evt); break;
-                        case NetzConstants.GlobalTag.LoadScene: OnLoadScreenEvent(client, evt); break;
+                        case NetzConstants.GlobalTag.LoadScene: OnLoadSceneEvent(client, evt); break;
                     }
                 }
                 else
                     OnObjectEvent(client, evt);
             }
-
-            // Move to active once the client receives and process the synchronize event
-            if(client.state == NetzClientState.Synchronizing && client.eventWriter.lastAcknowledgedId >= client.synchronizEventId)
-                client.state = NetzClientState.Active;
 
 
             // Send snapshot to the client 
@@ -284,7 +305,7 @@ namespace NoZ.Netz
   //          }
         }
 
-        private void SendLoadSceneToClient (ConnectedClient client)
+        private void SendLoadSceneEvent (ConnectedClient client)
         {
             var writer = client.eventWriter.BeginEnqueue(0, NetzConstants.GlobalTag.LoadScene);
             writer.WriteFixedString32(_scene);
@@ -303,14 +324,56 @@ namespace NoZ.Netz
             {
                 var netobj = node.Value;
                 writer.WriteULongDelta(netobj._networkInstanceId, baseInstanceId);
-                netobj.Write(ref writer);                
+                writer.WriteBit(netobj.isSceneObject);
 
+                if(!netobj.isSceneObject)
+                    writer.WriteULong(netobj.prefabHash);
+
+                netobj.Write(ref writer);
                 baseInstanceId = netobj._networkInstanceId;
             }
 
             writer.WriteULongDelta(0, baseInstanceId);
 
             client.eventWriter.EndEnqueue(writer);
+        }
+
+        internal void SendSpawnEvent (NetzObject netobj)
+        {
+            foreach(var client in _clients)
+            {
+                // Do not send spawn events to the host, the object is already spawned
+                if (client.player.isHost)
+                    continue;
+
+                // Only active clients need spawn events because the synchronize event will
+                // issue spawn events for all objects as well
+                if (client.state != NetzClientState.Active)
+                    continue;
+
+                var writer = client.eventWriter.BeginEnqueue(0, NetzConstants.GlobalTag.Spawn);
+                writer.WriteULong(netobj._networkInstanceId);
+                writer.WriteULong(netobj.prefabHash);
+                netobj.Write(ref writer);
+                client.eventWriter.EndEnqueue(writer);
+            }
+        }
+
+        internal void SendDespawnEvent (NetzObject netobj)
+        {
+            foreach (var client in _clients)
+            {
+                // Do not send spawn events to the host, the object is already spawned
+                if (client.player.isHost)
+                    continue;
+
+                if (client.state != NetzClientState.Active)
+                    continue;
+
+                var writer = client.eventWriter.BeginEnqueue(0, NetzConstants.GlobalTag.Despawn);
+                writer.WriteULong(netobj._networkInstanceId);
+                client.eventWriter.EndEnqueue(writer);
+            }
         }
 
         internal void Update ()
@@ -380,7 +443,6 @@ namespace NoZ.Netz
         {
             var writer = BeginSend(client);
             writer.WriteFloat(Time.time);
-            Debug.Log($"WriteSnapshot: t={Time.time}");
             client.lastSnapshotTime = Time.time;
 
             // Write the last processed incoming event so the client will stop sending it
@@ -428,19 +490,57 @@ namespace NoZ.Netz
             // Is this client the host?
             client.player.isHost = client.id == (NetzClient.instance?.id ?? uint.MaxValue);
 
-            if(!client.player.isHost)
+            SendPlayerInfoEvent(client);
+
+            if (!client.player.isHost)
             {
-                SendLoadSceneToClient(client);
+                SendLoadSceneEvent(client);
                 SetClientState(client, NetzClientState.LoadingScene);
             }
             else
                 SetClientState(client, NetzClientState.Active);
+
+            onPlayerConnected?.Invoke(client.player);
+        }
+
+        /// <summary>
+        /// Send a player info event to all other connected clients
+        /// </summary>
+        private void SendPlayerInfoEvent(ConnectedClient client)
+        {
+            foreach (var connectedClient in _clients)
+            {
+                if (connectedClient.state == NetzClientState.Connecting || connectedClient == client)
+                    continue;
+
+                var writer = connectedClient.eventWriter.BeginEnqueue(0, NetzConstants.GlobalTag.PlayerInfo);
+                writer.WriteUInt(connectedClient.id);
+                connectedClient.player.Write(ref writer);
+                connectedClient.eventWriter.EndEnqueue(writer);
+            }
+        }
+
+        /// <summary>
+        /// Send a player disconnect message to all other connected players
+        /// </summary>
+        /// <param name="client"></param>
+        private void SendPlayerDisconnectEvent (ConnectedClient client)
+        {
+            foreach (var connectedClient in _clients)
+            {
+                if (connectedClient.state == NetzClientState.Connecting || connectedClient == client)
+                    continue;
+
+                var writer = connectedClient.eventWriter.BeginEnqueue(0, NetzConstants.GlobalTag.PlayerDisconnect);
+                writer.WriteUInt(connectedClient.id);
+                connectedClient.eventWriter.EndEnqueue(writer);
+            }
         }
 
         /// <summary>
         /// Event sent from client when loading of a scene is finished. 
         /// </summary>
-        private void OnLoadScreenEvent (ConnectedClient client, ReliableEvent evt)
+        private void OnLoadSceneEvent (ConnectedClient client, ReliableEvent evt)
         {
             // This event should only be sent when waiting for the client to load a scene
             if (client.state != NetzClientState.LoadingScene)
@@ -486,7 +586,9 @@ namespace NoZ.Netz
                 }
 
                 // Load the scene and wait for it to finish to start snapshots back up
-                yield return SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive);
+                var ao = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive);
+                ao.allowSceneActivation = true;
+                yield return ao;
 
                 _scene = sceneName;
 

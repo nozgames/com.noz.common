@@ -12,14 +12,6 @@ namespace NoZ.Netz
 {
     public unsafe class NetzClient
     {
-        private class ConnectedPlayer
-        {
-            public uint id;
-            public NetzClientState oldState;
-            public NetzClientState state;
-            public NetzPlayer player;
-        }
-
         private NetworkConnection _connection;
         private NetworkDriver _driver;
         private NetworkPipeline _pipeline;
@@ -29,7 +21,7 @@ namespace NoZ.Netz
         private double _lastMessageReceiveTime;
         private ReliableEventQueueWriter _eventWriter;
         private ReliableEventQueueReader _eventReader;
-        private Dictionary<uint, ConnectedPlayer> _connectedClients = new Dictionary<uint, ConnectedPlayer>();
+        private Dictionary<uint, NetzPlayer> _players;
         internal float _serverTimeDelta;
 
         public static NetzClient instance { get; private set; }
@@ -43,6 +35,7 @@ namespace NoZ.Netz
         public bool isHost { get; private set; }
 
         public static event Action<NetzPlayer> onPlayerConnected;
+        public static event Action<NetzPlayer> onPlayerChanged;
         public static event Action<NetzPlayer> onPlayerDisconnected;
 
         private double timeSinceLastMessageSent => Time.realtimeSinceStartupAsDouble - _lastMessageSendTime;
@@ -86,6 +79,8 @@ namespace NoZ.Netz
 
             _eventWriter = new ReliableEventQueueWriter(NetzConstants.MaxReliableEvents, NetzConstants.ReliableEventBufferSize);
             _eventReader = new ReliableEventQueueReader(NetzConstants.MaxReliableEvents, NetzConstants.ReliableEventBufferSize);;
+
+            _players = new Dictionary<uint, NetzPlayer>();
         }
 
         public static void Connect(NetworkEndPoint endpoint, NetzPlayer player)
@@ -210,7 +205,11 @@ namespace NoZ.Netz
                 {
                     case NetzConstants.GlobalTag.Connect: OnConnectEvent(evt); break;
                     case NetzConstants.GlobalTag.LoadScene: OnLoadSceneEvent(evt); break;
-                    case NetzConstants.GlobalTag.Synchronize: OnSynchronizeEvent(evt); break;                    
+                    case NetzConstants.GlobalTag.Synchronize: OnSynchronizeEvent(evt); break;
+                    case NetzConstants.GlobalTag.PlayerInfo: OnPlayerInfoEvent(evt); break;
+                    case NetzConstants.GlobalTag.PlayerDisconnect: OnPlayerDisconnectEvent(evt); break;
+                    case NetzConstants.GlobalTag.Spawn: OnSpawnEvent(evt); break;
+                    case NetzConstants.GlobalTag.Despawn: OnDespawnEvent(evt); break;
                 }                
             }
 
@@ -286,17 +285,42 @@ namespace NoZ.Netz
                 if (instanceId == 0)
                     break;
 
-                // Find the objecct
-                NetzObjectManager.TryGetObject(instanceId, out var netobj);
-
-                netobj.Read(ref reader);
+                var isSceneObject = reader.ReadBit();
+                if (isSceneObject && NetzObjectManager.TryGetObject(instanceId, out var netobj))
+                    netobj.Read(ref reader);
+                else if (!isSceneObject)
+                {
+                    var prefabHash = reader.ReadULong();
+                    if(NetzManager.instance.TryGetPrefab(prefabHash, out var prefab))
+                    {
+                        NetzObjectManager.SpawnOnClient(prefabHash, 0, instanceId, ref reader);
+                    }
+                }
             }
         }
 
         private void OnConnectEvent (ReliableEvent evt)
         {
+            _players.Clear();
+
             var reader = evt.GetReader();
             id = reader.ReadUInt();
+
+            while(!reader.isEOF)
+            {
+                var playerId = reader.ReadUInt();
+                if (playerId == 0)
+                    break;
+
+                var player = Activator.CreateInstance(_player.GetType()) as NetzPlayer;
+                player.id = playerId;
+                player.isLocal = false;
+                player.isHost = false;
+                player.isConnected = true;
+                player.Read(ref reader);
+
+                _players[playerId] = player;
+            }
 
             // Respond to the server with the player info
             var writer = _eventWriter.BeginEnqueue(0, NetzConstants.GlobalTag.Connect);
@@ -310,8 +334,11 @@ namespace NoZ.Netz
             else
                 state = NetzClientState.Synchronizing;
 
-            // Raise player connected event for ourself
+            // Raise player connected event for ourself and all other connected players
             onPlayerConnected?.Invoke(_player);
+
+            foreach(var connectedPlayer in _players.Values)
+                onPlayerConnected?.Invoke(connectedPlayer);
         }
 
         private void OnLoadSceneEvent (ReliableEvent evt)
@@ -358,6 +385,53 @@ namespace NoZ.Netz
             state = NetzClientState.Active;
         }
 
+        private void OnPlayerInfoEvent (ReliableEvent evt)
+        {
+            var reader = evt.GetReader();
+            var playerId = reader.ReadUInt();
+            var newPlayer = !_players.TryGetValue(playerId, out var player);
+            if (newPlayer)
+            {
+                player = Activator.CreateInstance(_player.GetType()) as NetzPlayer;
+                _players[playerId] = player;
+            }
+
+            player.Read(ref reader);
+
+            if (newPlayer)
+                onPlayerConnected?.Invoke(player);
+            else
+                onPlayerChanged?.Invoke(player);
+        }
+
+        private void OnPlayerDisconnectEvent (ReliableEvent evt)
+        {
+            var reader = evt.GetReader();
+            var playerId = reader.ReadUInt();
+
+            if (!_players.TryGetValue(playerId, out var player))
+                return;
+
+            _players.Remove(playerId);
+
+            onPlayerDisconnected?.Invoke(player);
+        }
+
+        private void OnSpawnEvent (ReliableEvent evt)
+        {
+            var reader = evt.GetReader();
+            var networkId = reader.ReadULong();
+            var prefabHash = reader.ReadULong();
+            NetzObjectManager.SpawnOnClient(prefabHash, 0, networkId, ref reader);
+        }
+
+        private void OnDespawnEvent(ReliableEvent evt)
+        {
+            var reader = evt.GetReader();
+            var networkId = reader.ReadULong();
+            NetzObjectManager.DespawnOnClient(networkId);
+        }
+
         private void OnObjectEvent (ReliableEvent evt)
         {
             if (!NetzObjectManager.TryGetObject(evt.target, out var netobj))
@@ -365,21 +439,6 @@ namespace NoZ.Netz
 
             var reader = evt.GetReader();
             netobj.ReadEvent(evt.tag, ref reader);
-        }
-
-        /// <summary>
-        /// Handles incoming object spawn messages
-        /// </summary>
-        private void OnSpawnMessage(FourCC messageId, NetzClient target, ref DataStreamReader reader)
-        {
-            var prefabHash = reader.ReadULong();
-            var ownerClientId = reader.ReadUInt();
-            var networkInstanceId = reader.ReadULong();
-            var netzObject = NetzObjectManager.SpawnOnClient(prefabHash, ownerClientId: ownerClientId, networkInstanceId: networkInstanceId);
-            if (null == netzObject)
-                return;
-
-            reader.ReadTransform(netzObject.transform);
         }
     }
 }

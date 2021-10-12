@@ -16,11 +16,6 @@ namespace NoZ.Netz
 
         private Dictionary<ulong, NetzObject> _prefabsByHash;
 
-        public bool isHost => NetzClient.instance != null && NetzServer.instance != null;
-        public bool isClient => NetzClient.instance != null && NetzServer.instance == null;
-        public bool isServer => NetzClient.instance == null && NetzServer.instance != null;
-        public bool isServerOrHost => isServer || isHost;
-
         public event ServerStateChangedEvent onServerStateChanged;
 
         public event ClientStateChangeEvent onClientStateChanged;
@@ -120,18 +115,6 @@ namespace NoZ.Netz
             _client = NetzClient.Connect(endpoint);
         }
 #endif
-
-        /// <summary>
-        /// Load the given scene
-        /// </summary>
-        /// <param name="sceneName"></param>
-        public Coroutine LoadSceneAsync (string sceneName)
-        {
-            if (!isServerOrHost)
-                throw new InvalidOperationException("LoadSceneAsync can only be called on the server");
-
-            return NetzServer.instance.LoadSceneAsync(sceneName);
-        }
 
         private void Update()
         {

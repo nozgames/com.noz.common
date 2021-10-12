@@ -65,6 +65,14 @@ namespace NoZ.Netz
             public const ushort Synchronize = 2;
 
             public const ushort LoadScene = 3;
+
+            public const ushort PlayerInfo = 4;
+
+            public const ushort PlayerDisconnect = 5;
+
+            public const ushort Spawn = 6;
+
+            public const ushort Despawn = 7;
         }
     }
 }

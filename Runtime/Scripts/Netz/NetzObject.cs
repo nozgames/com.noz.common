@@ -39,8 +39,8 @@ namespace NoZ.Netz
 
         public ulong networkInstanceId => _networkInstanceId;
 
-        public bool isClient => NetzManager.instance.isClient;
-        public bool isServer => NetzManager.instance.isServerOrHost;
+        public bool isClient => !NetzServer.isCreated && NetzClient.isCreated;
+        public bool isServer => NetzServer.isCreated;
         public bool isSceneObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == 0;
         public bool isCustomObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == NetzConstants.CustomNetworkInstanceId;
         public bool isSpawnedObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == NetzConstants.SpawnedObjectInstanceId;
