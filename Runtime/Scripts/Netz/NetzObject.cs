@@ -17,18 +17,22 @@ namespace NoZ.Netz
     /// </summary>
     public abstract class NetzObject : MonoBehaviour
     {
-        private static Dictionary<Type, FieldInfo[]> _variableFieldsByType = new Dictionary<Type, FieldInfo[]>();
+        /// <summary>
+        /// Dictionary of network id to object
+        /// </summary>
+        internal static readonly Dictionary<ulong, NetzObject> _objectsById = new Dictionary<ulong, NetzObject>();
+
+        /// <summary>
+        /// Linked list of all spawned objects
+        /// </summary>
+        internal static readonly LinkedList<NetzObject> _objects = new LinkedList<NetzObject>();
+
 
         internal const ulong FirstSpawnedObjectInstanceId = 1 << 24;
 
         [SerializeField] internal ulong _networkInstanceId = 0;
         [Tooltip("Optional string used to generate the prefab hash.  Set this if you have name collisions")]
         [SerializeField] string _prefabHashGenerator = null;
-
-        /// <summary>
-        /// Snapshot the object was last changed in
-        /// </summary>
-        internal uint _changedInSnapshot = 0;
 
         /// <summary>
         /// Node that links this object into global list of network objects
@@ -45,12 +49,12 @@ namespace NoZ.Netz
         public bool isCustomObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == NetzConstants.CustomNetworkInstanceId;
         public bool isSpawnedObject => (_networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) == NetzConstants.SpawnedObjectInstanceId;
 
-        public bool isOwnedByLocalClient => ownerClientId == (NetzClient.instance?.id ?? uint.MaxValue);
+        public bool isOwnedByLocalClient => ownerId == (NetzClient.instance?.id ?? uint.MaxValue);
 
         /// <summary>
         /// Identifier of the client that owns this object
         /// </summary>
-        public uint ownerClientId { get; internal set; }
+        public uint ownerId { get; internal set; }
 
         protected NetzObject()
         {
@@ -123,6 +127,35 @@ namespace NoZ.Netz
         protected internal virtual void OnMessage (ushort tag, ref NetzReader reader)
         {
         }
+
+        /// <summary>
+        /// Track the network object by adding it to the global lists.
+        /// </summary>
+        /// <param name="netzobj">Network object</param>
+        internal static void Track (NetzObject netzobj)
+        {
+            _objectsById.Add(netzobj._networkInstanceId, netzobj);
+            _objects.AddFirst(netzobj._node);
+        }
+
+        /// <summary>
+        /// Untrackc the network object by removing it from the global lists.
+        /// </summary>
+        /// <param name="netzobj">Network object</param>
+        internal static void Untrack (NetzObject netzobj)
+        {
+            _objectsById.Remove(netzobj.networkInstanceId);
+            _objects.Remove(netzobj._node);
+        }
+
+        /// <summary>
+        /// Try retrieving a tracked object by its network identifier
+        /// </summary>
+        /// <param name="networkInstanceId">Network identifier</param>
+        /// <param name="netzobj">Returned Network object</param>
+        /// <returns>True if the tracked object was found</returns>
+        public static bool TryGetTracked (ulong networkInstanceId, out NetzObject netzobj) =>
+            _objectsById.TryGetValue(networkInstanceId, out netzobj);
     }
 }
 

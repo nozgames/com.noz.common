@@ -138,6 +138,37 @@ namespace NoZ.Netz
         {
             onServerStateChanged?.Invoke(oldState, newState);
         }
+
+#if false
+        /// <summary>
+        /// Instantiate a network object using a custom type
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="networkInstanceId"></param>
+        /// <param name="parent"></param>
+        /// <returns></returns>
+        /// <exception cref="System.InvalidOperationException"></exception>
+        public static T Instantiate<T>(ulong networkInstanceId, Transform parent = null) where T : NetzObject
+        {
+            if ((networkInstanceId & NetzConstants.ObjectInstanceIdTypeMask) != NetzConstants.CustomNetworkInstanceId)
+                throw new System.InvalidOperationException("Networking InstanceId must be a custom network instance id");
+
+            if (_objectsById.ContainsKey(networkInstanceId))
+                throw new System.InvalidOperationException("Custom network instance identifier is already in use");
+
+            var gameObject = new GameObject();
+            gameObject.transform.SetParent(parent);
+            var t = gameObject.AddComponent<T>();
+            t._networkInstanceId = networkInstanceId;
+
+            _objectsById.Add(networkInstanceId, t);
+            _objects.AddLast(t._node);
+
+            t.NetworkStart();
+
+            return t;
+        }
+#endif
     }
 }
 

@@ -72,7 +72,7 @@ namespace NoZ.Netz
 
             public const ushort Spawn = 6;
 
-            public const ushort Despawn = 7;
+            public const ushort Destroy = 7;
         }
     }
 }

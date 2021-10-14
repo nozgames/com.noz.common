@@ -209,7 +209,7 @@ namespace NoZ.Netz
                     case NetzConstants.GlobalTag.PlayerInfo: OnPlayerInfoEvent(evt); break;
                     case NetzConstants.GlobalTag.PlayerDisconnect: OnPlayerDisconnectEvent(evt); break;
                     case NetzConstants.GlobalTag.Spawn: OnSpawnEvent(evt); break;
-                    case NetzConstants.GlobalTag.Despawn: OnDespawnEvent(evt); break;
+                    case NetzConstants.GlobalTag.Destroy: OnDespawnEvent(evt); break;
                 }                
             }
 
@@ -286,14 +286,14 @@ namespace NoZ.Netz
                     break;
 
                 var isSceneObject = reader.ReadBit();
-                if (isSceneObject && NetzObjectManager.TryGetObject(instanceId, out var netobj))
+                if (isSceneObject && NetzObject.TryGetTracked(instanceId, out var netobj))
                     netobj.Read(ref reader);
                 else if (!isSceneObject)
                 {
                     var prefabHash = reader.ReadULong();
                     if(NetzManager.instance.TryGetPrefab(prefabHash, out var prefab))
                     {
-                        NetzObjectManager.SpawnOnClient(prefabHash, 0, instanceId, ref reader);
+                        Instantiate(prefabHash, 0, instanceId, ref reader);
                     }
                 }
             }
@@ -360,7 +360,7 @@ namespace NoZ.Netz
                 _scene = sceneName;
 
                 // Register and start all of the scene objects
-                NetzObjectManager.SpawnSceneObjects();
+                InstantiateSceneObjects();
 
                 // Inform the server that we have finished loading the scene
                 _eventWriter.Enqueue(0, NetzConstants.GlobalTag.LoadScene);
@@ -422,23 +422,86 @@ namespace NoZ.Netz
             var reader = evt.GetReader();
             var networkId = reader.ReadULong();
             var prefabHash = reader.ReadULong();
-            NetzObjectManager.SpawnOnClient(prefabHash, 0, networkId, ref reader);
+            Instantiate(prefabHash, 0, networkId, ref reader);
         }
 
         private void OnDespawnEvent(ReliableEvent evt)
         {
             var reader = evt.GetReader();
             var networkId = reader.ReadULong();
-            NetzObjectManager.DespawnOnClient(networkId);
+            Destroy(networkId);
         }
 
         private void OnObjectEvent (ReliableEvent evt)
         {
-            if (!NetzObjectManager.TryGetObject(evt.target, out var netobj))
+            if (!NetzObject.TryGetTracked(evt.target, out var netzobj))
                 return;
 
             var reader = evt.GetReader();
-            netobj.ReadEvent(evt.tag, ref reader);
+            netzobj.ReadEvent(evt.tag, ref reader);
+        }
+
+        /// <summary>
+        /// Instantiate a network object on the client
+        /// </summary>
+        /// <param name="prefabHash">Prefab hash</param>
+        /// <param name="ownerId">Identifier of the player that will own the object</param>
+        /// <param name="networkInstanceId">Identifier of the object on the server</param>
+        /// <param name="reader">Reader used to serialize in the objects state</param>
+        /// <returns>Instantiated object</returns>
+        private NetzObject Instantiate (ulong prefabHash, uint ownerId, ulong networkInstanceId, ref NetzReader reader)
+        {
+            // Look up the prefab
+            if (!NetzManager.instance.TryGetPrefab(prefabHash, out var prefab))
+            {
+                Debug.LogError($"Unknown prefab hash `{prefabHash}`.  Make sure the prefab is included in the NetzManager prefab list.");
+                return null;
+            }
+
+            // TODO: parent
+            var netzobj = UnityEngine.Object.Instantiate(prefab.gameObject).GetComponent<NetzObject>();
+            netzobj._networkInstanceId = networkInstanceId;
+            netzobj.ownerId = ownerId;
+
+            NetzObject.Track(netzobj);
+
+            netzobj.Read(ref reader);
+
+            netzobj.NetworkStart();
+
+            return netzobj;
+        }
+
+        /// <summary>
+        /// Instantiate all objects in the scene.  This is done after the scene is loaded 
+        /// </summary>
+        private void InstantiateSceneObjects ()
+        {
+            var sceneObjects = UnityEngine.Object.FindObjectsOfType<NetzObject>();
+            foreach (var netzobj in sceneObjects)
+                NetzObject.Track(netzobj);
+
+            foreach (var netzobj in sceneObjects)
+                netzobj.NetworkStart();
+        }
+
+        /// <summary>
+        /// Destroy the network object specified by its network instance id
+        /// </summary>
+        /// <param name="networkInstanceId">Network object isntance id</param>
+        internal void Destroy (ulong networkInstanceId)
+        {
+            if (NetzServer.isCreated)
+                throw new InvalidOperationException("Network objects cannot be destroyed on the client when the server is running");
+
+            if (!NetzObject.TryGetTracked(networkInstanceId, out var netzobj))
+                return;
+
+            NetzObject.Untrack(netzobj);
+
+            netzobj.OnDespawn();
+
+            UnityEngine.Object.Destroy(netzobj.gameObject);
         }
     }
 }

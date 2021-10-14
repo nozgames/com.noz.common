@@ -51,6 +51,7 @@ namespace NoZ.Netz
         private Type _playerType;
         private NetzServerState _state = NetzServerState.Unknown;
         private ReliableEventQueueWriter _events;
+        private ulong _nextSpawnedObjectInstanceId = NetzConstants.SpawnedObjectInstanceId;
 
         /// <summary>
         /// Identifier of the current snapshot
@@ -320,7 +321,7 @@ namespace NoZ.Netz
             writer.WriteFixedString32(_scene);
 
             var baseInstanceId = 0UL;
-            for(var node = NetzObjectManager._objects.First; node != null; node = node.Next)
+            for(var node = NetzObject._objects.First; node != null; node = node.Next)
             {
                 var netobj = node.Value;
                 writer.WriteULongDelta(netobj._networkInstanceId, baseInstanceId);
@@ -359,7 +360,7 @@ namespace NoZ.Netz
             }
         }
 
-        internal void SendDespawnEvent (NetzObject netobj)
+        internal void SendDestroyEvent (NetzObject netobj)
         {
             foreach (var client in _clients)
             {
@@ -370,7 +371,7 @@ namespace NoZ.Netz
                 if (client.state != NetzClientState.Active)
                     continue;
 
-                var writer = client.eventWriter.BeginEnqueue(0, NetzConstants.GlobalTag.Despawn);
+                var writer = client.eventWriter.BeginEnqueue(0, NetzConstants.GlobalTag.Destroy);
                 writer.WriteULong(netobj._networkInstanceId);
                 client.eventWriter.EndEnqueue(writer);
             }
@@ -593,7 +594,7 @@ namespace NoZ.Netz
                 _scene = sceneName;
 
                 // Register and start all of the scene objects
-                NetzObjectManager.SpawnSceneObjects();
+                InstantiateSceneObject();
 
                 // Set state to running now that we have a loaded scene
                 SetState(NetzServerState.Active);
@@ -611,6 +612,86 @@ namespace NoZ.Netz
 
         internal void EndSendEvent (NetzWriter writer) =>
             _events.EndEnqueue(writer);
+
+
+        /// <summary>
+        /// Instantiate a new network object on the server
+        /// </summary>
+        /// <param name="ownerId">Player that ownes the object </param>
+        /// <param name="prefab">Prefab</param>
+        /// <param name="parent">Optional parent object</param>
+        /// <returns>Instantiated network object</returns>
+        public NetzObject Instantiate(uint ownerId, NetzObject prefab, NetzObject parent = null) =>
+            Instantiate(ownerId, prefab, parent, Vector3.zero, Quaternion.identity);
+
+        /// <summary>
+        /// Instantiate a new network object on the server
+        /// </summary>
+        /// <param name="ownerId">Player that ownes the object </param>
+        /// <param name="prefab">Prefab</param>
+        /// <param name="parent">Optional parent object</param>
+        /// <param name="position">Starting position</param>
+        /// <param name="rotation">Starting rotation</param>
+        /// <returns>Instantiated network object</returns>
+        public NetzObject Instantiate(uint ownerId, NetzObject prefab, NetzObject parent, Vector3 position, Quaternion rotation)
+        {
+            // Instantiate the actual game object
+            var go = UnityEngine.Object.Instantiate(prefab.gameObject, parent == null ? null : parent.transform);
+            var netzobj = go.GetComponent<NetzObject>();
+            if (null == netzobj)
+            {
+                UnityEngine.Object.Destroy(go);
+                return null;
+            }
+
+            netzobj._networkInstanceId = _nextSpawnedObjectInstanceId++;
+            netzobj.prefabHash = prefab.prefabHash;
+            netzobj.ownerId = ownerId;
+            netzobj.transform.position = position;
+            netzobj.transform.rotation = rotation;
+
+            // Track the object
+            NetzObject.Track(netzobj);
+
+            netzobj.NetworkStart();
+
+            SendSpawnEvent(netzobj);
+
+            return netzobj;
+        }
+
+        /// <summary>
+        /// Instantiate all objects within the scene.
+        /// </summary>
+        private void InstantiateSceneObject()
+        {
+            // Track all scene objects
+            var sceneObjects = UnityEngine.Object.FindObjectsOfType<NetzObject>();
+            foreach (var netobj in sceneObjects)
+                NetzObject.Track(netobj);
+
+            // Issue a network start on all scene objects
+            foreach (var obj in sceneObjects)
+                obj.NetworkStart();
+        }
+
+        /// <summary>
+        /// Despawn a networked object
+        /// </summary>
+        /// <param name="netzobj">Object to destroy</param>
+        public void Destroy(NetzObject netzobj)
+        {
+            NetzObject.Untrack(netzobj);
+
+            netzobj.OnDespawn();
+
+            // TODO: if this is a scene object we need to track the destroy
+
+            SendDestroyEvent(netzobj);
+
+            // Destroy the game object
+            UnityEngine.Object.Destroy(netzobj.gameObject);
+        }
     }
 }
 
