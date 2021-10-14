@@ -39,6 +39,8 @@ namespace NoZ.Netz
 
         public void WriteUInt(uint value) => _writer.WritePackedUInt(value, NetzConstants.CompressionModel);
 
+        public void WriteInt(int value) => _writer.WritePackedInt(value, NetzConstants.CompressionModel);
+
         public void WriteByte(byte value) => _writer.WriteByte(value);
 
         public void WriteBit(bool value) => _writer.WriteRawBits(value ? 1U : 0U, 1);

@@ -339,7 +339,7 @@ namespace NoZ.Netz
             client.eventWriter.EndEnqueue(writer);
         }
 
-        internal void SendSpawnEvent (NetzObject netobj)
+        internal void SentInstantiateEvent (NetzObject netobj)
         {
             foreach(var client in _clients)
             {
@@ -352,9 +352,10 @@ namespace NoZ.Netz
                 if (client.state != NetzClientState.Active)
                     continue;
 
-                var writer = client.eventWriter.BeginEnqueue(0, NetzConstants.GlobalTag.Spawn);
+                var writer = client.eventWriter.BeginEnqueue(0, NetzConstants.GlobalTag.Instantiate);
                 writer.WriteULong(netobj._networkInstanceId);
                 writer.WriteULong(netobj.prefabHash);
+                writer.WriteUInt(netobj.ownerId);
                 netobj.Write(ref writer);
                 client.eventWriter.EndEnqueue(writer);
             }
@@ -487,6 +488,7 @@ namespace NoZ.Netz
             // Read the player information
             client.player = Activator.CreateInstance(_playerType) as NetzPlayer;
             client.player.Read(ref reader);
+            client.player.id = client.id;
 
             // Is this client the host?
             client.player.isHost = client.id == (NetzClient.instance?.id ?? uint.MaxValue);
@@ -655,7 +657,7 @@ namespace NoZ.Netz
 
             netzobj.NetworkStart();
 
-            SendSpawnEvent(netzobj);
+            SentInstantiateEvent(netzobj);
 
             return netzobj;
         }

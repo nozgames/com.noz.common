@@ -34,6 +34,8 @@ namespace NoZ.Netz
 
         public uint ReadUInt() => _reader.ReadPackedUInt(NetzConstants.CompressionModel);
 
+        public int ReadInt () => _reader.ReadPackedInt(NetzConstants.CompressionModel);
+
         public string ReadFixedString32() => _reader.ReadFixedString32().Value;
 
         public byte ReadByte() => _reader.ReadByte();

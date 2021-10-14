@@ -208,8 +208,8 @@ namespace NoZ.Netz
                     case NetzConstants.GlobalTag.Synchronize: OnSynchronizeEvent(evt); break;
                     case NetzConstants.GlobalTag.PlayerInfo: OnPlayerInfoEvent(evt); break;
                     case NetzConstants.GlobalTag.PlayerDisconnect: OnPlayerDisconnectEvent(evt); break;
-                    case NetzConstants.GlobalTag.Spawn: OnSpawnEvent(evt); break;
-                    case NetzConstants.GlobalTag.Destroy: OnDespawnEvent(evt); break;
+                    case NetzConstants.GlobalTag.Instantiate: OnInstantiateEvent(evt); break;
+                    case NetzConstants.GlobalTag.Destroy: OnDestroyEvent(evt); break;
                 }                
             }
 
@@ -417,15 +417,16 @@ namespace NoZ.Netz
             onPlayerDisconnected?.Invoke(player);
         }
 
-        private void OnSpawnEvent (ReliableEvent evt)
+        private void OnInstantiateEvent (ReliableEvent evt)
         {
             var reader = evt.GetReader();
             var networkId = reader.ReadULong();
             var prefabHash = reader.ReadULong();
-            Instantiate(prefabHash, 0, networkId, ref reader);
+            var playerId = reader.ReadUInt();
+            Instantiate(prefabHash, playerId, networkId, ref reader);
         }
 
-        private void OnDespawnEvent(ReliableEvent evt)
+        private void OnDestroyEvent(ReliableEvent evt)
         {
             var reader = evt.GetReader();
             var networkId = reader.ReadULong();

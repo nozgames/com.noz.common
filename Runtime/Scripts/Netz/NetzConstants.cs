@@ -70,7 +70,7 @@ namespace NoZ.Netz
 
             public const ushort PlayerDisconnect = 5;
 
-            public const ushort Spawn = 6;
+            public const ushort Instantiate = 6;
 
             public const ushort Destroy = 7;
         }
