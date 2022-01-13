@@ -261,6 +261,9 @@ namespace NoZ.Animz
 
         private Blend GetBlend(AnimzClip clip)
         {
+            if (!_playableGraph.IsValid())
+                InitializeGraph();
+
             if (_blendMap.TryGetValue(clip.GetInstanceID(), out var existingBlend))
                 return existingBlend;
 

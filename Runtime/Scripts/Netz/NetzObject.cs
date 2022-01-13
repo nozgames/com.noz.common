@@ -94,12 +94,12 @@ namespace NoZ.Netz
         /// Send a dataless event
         /// </summary>
         /// <param name="tag">Event tag</param>
-        public void SendEventToClient (ushort tag)
+        public void SendToClient (ushort tag)
         {
             NetzServer.instance.EndSendEvent(NetzServer.instance.BeginSendEvent(this, tag));
         }
 
-        public NetzWriter BeginSendEventToClient (ushort tag)
+        public NetzWriter BeginSendToClient (ushort tag)
         {
             if (!NetzServer.isCreated)
                 throw new InvalidOperationException("BeginSendEventToClient must be called on a server");
@@ -107,9 +107,25 @@ namespace NoZ.Netz
             return NetzServer.instance.BeginSendEvent(this, tag);
         }
 
-        public void EndSendEvent (NetzWriter writer)
+        public void EndSendToClient (NetzWriter writer)
         {
+            NetzServer.instance.EndSendEvent(writer);
+        }
 
+        public NetzWriter BeginSendToServer (ushort tag)
+        {
+            if (!NetzClient.isCreated)
+                throw new InvalidOperationException("BeginSendEventToClient must be called on a server");
+
+            if (ownerId != NetzClient.instance.id)
+                throw new InvalidOperationException("Objects on the client can only send events to the server if the local client owns them");
+
+            return NetzClient.instance.BeginSendEvent (this, tag);
+        }
+
+        public void EndSendToServer (NetzWriter writer)
+        {
+            NetzClient.instance.EndSendEvent(writer);
         }
 
         internal void ReadEvent (ushort tag, ref NetzReader reader)

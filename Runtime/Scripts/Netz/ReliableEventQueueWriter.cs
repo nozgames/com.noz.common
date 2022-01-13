@@ -1,3 +1,5 @@
+#if UNITY_COLLECTIONS && UNITY_TRANSPORT
+
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Networking.Transport;
 using UnityEngine;
@@ -35,16 +37,16 @@ namespace NoZ.Netz
             }
         }
 
-        public void Enqueue (ulong target, ushort tag)
+        public void Enqueue (ulong targetObjectId, ushort tag)
         {
-            EndEnqueue(BeginEnqueue(target, tag));
+            EndEnqueue(BeginEnqueue(targetObjectId, tag));
         }
 
-        public NetzWriter BeginEnqueue (ulong target, ushort tag)
+        public NetzWriter BeginEnqueue (ulong targetObjectId, ushort tag)
         {
             var evtinfo = GetEventInfo(_head + _count);
             evtinfo.tag = tag;
-            evtinfo.target = target;
+            evtinfo.target = targetObjectId;
             evtinfo.id = _nextEventId;
             evtinfo.size = 0;
             SetEventInfo(_head + _count, evtinfo);
@@ -118,3 +120,5 @@ namespace NoZ.Netz
     }
 }
 
+
+#endif

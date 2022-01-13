@@ -1,3 +1,5 @@
+#if UNITY_COLLECTIONS && UNITY_TRANSPORT
+
 using Unity.Networking.Transport;
 using UnityEngine;
 
@@ -61,3 +63,5 @@ namespace NoZ.Netz
         }
     }
 }
+
+#endif

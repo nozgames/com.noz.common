@@ -1,3 +1,5 @@
+#if UNITY_COLLECTIONS && UNITY_TRANSPORT
+
 namespace NoZ.Netz
 {
     public abstract class NetzPlayer
@@ -15,3 +17,5 @@ namespace NoZ.Netz
         public abstract void Read(ref NetzReader reader);
     }
 }
+
+#endif

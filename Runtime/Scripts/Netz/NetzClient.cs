@@ -504,6 +504,13 @@ namespace NoZ.Netz
 
             UnityEngine.Object.Destroy(netzobj.gameObject);
         }
+
+        internal NetzWriter BeginSendEvent(NetzObject target, ushort tag) =>
+            _eventWriter.BeginEnqueue(target._networkInstanceId, tag);
+
+        internal void EndSendEvent(NetzWriter writer) =>
+            _eventWriter.EndEnqueue(writer);
+
     }
 }
 
