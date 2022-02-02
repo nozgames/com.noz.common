@@ -33,12 +33,12 @@ namespace NoZ
 
         public void Play()
         {
-            AudioManager.instance?.Play(this);
+            AudioManager.Instance?.Play(this);
         }
 
         public void Play(float volume, float pitch)
         {
-            AudioManager.instance?.Play(this, volume, pitch);
+            AudioManager.Instance?.Play(this, volume, pitch);
         }
     }
 

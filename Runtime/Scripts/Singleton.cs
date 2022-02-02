@@ -13,7 +13,9 @@ namespace NoZ
     {
         private static T _instance = null;
 
-        public static T instance => _instance;
+        public static T Instance => _instance;
+
+        public static bool IsInitialized { get; private set; }
 
         protected virtual void Awake()
         {
@@ -25,10 +27,24 @@ namespace NoZ
             _instance = null;
         }
 
-        public override void Initialize() => (_instance as Singleton<T>).OnInitialize();
+        public override void Initialize()
+        {
+            if (IsInitialized)
+                return;
 
-        public override void Shutdown() => (_instance as Singleton<T>).OnShutdown();
+            IsInitialized = true;
+            (_instance as Singleton<T>).OnInitialize();
+        }
 
+        public override void Shutdown()
+        {
+            if (!IsInitialized)
+                return;
+
+            IsInitialized = false;
+            (_instance as Singleton<T>).OnShutdown();
+        }
+        
         protected virtual void OnInitialize() { }
 
         protected virtual void OnShutdown() { }

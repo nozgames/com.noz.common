@@ -7,27 +7,6 @@ using UnityEngine;
 
 namespace NoZ.Stylez
 {
-    [Serializable]
-    public class StylezStyle2
-    {
-        [Tooltip("Optional style sheet style and all children")]
-        [SerializeField] private StylezSheet _styleSheet = null;
-
-        [Tooltip("Identifier of the style")]
-        [SerializeField] private string _id = null;
-
-        /// <summary>
-        /// Parent style for all styles that do not have providers
-        /// </summary>
-        private StylezStyle _parent = null;
-
-        /// <summary>
-        /// Style targets
-        /// </summary>
-        // TODO: can we store the target info with this to prevent needing a lookup?
-        private Component[] _targets;
-    }
-
     public class StylezStyle : MonoBehaviour
     {
         [Tooltip("Optional style sheet style and all children")]

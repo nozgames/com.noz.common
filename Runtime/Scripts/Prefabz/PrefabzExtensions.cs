@@ -8,7 +8,7 @@ namespace NoZ.Prefabz
     {
         public static void PooledDestroy (this GameObject gameObject)
         {
-            PrefabzManager.instance.PooledDestroy(gameObject);
+            PrefabzManager.Instance.PooledDestroy(gameObject);
         }
     }
 }

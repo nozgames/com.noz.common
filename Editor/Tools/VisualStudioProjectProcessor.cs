@@ -15,7 +15,7 @@ namespace NoZ.Tools
         public static string OnGeneratedCSProject(string path, string content)
         {
             // Only fix ourself
-            if (!path.Contains("NoZ.Common"))
+            if (!path.Contains("NoZ."))
                 return content;
 
             try
