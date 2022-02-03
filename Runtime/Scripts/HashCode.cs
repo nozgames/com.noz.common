@@ -16,7 +16,7 @@ namespace NoZ
         /// </summary>
         /// <param name="value">String value to convert to hash</param>
         /// <returns>Sable 32-bit hash</returns>
-        internal static uint GetStableHash32(this string txt)
+        public static uint GetStableHash32(this string txt)
         {
             unchecked
             {
@@ -40,7 +40,7 @@ namespace NoZ
         /// </summary>
         /// <param name="value">String value to convert to hash</param>
         /// <returns>Sable 64-bit hash</returns>
-        internal static ulong GetStableHash64(this string value)
+        public static ulong GetStableHash64(this string value)
         {
             unchecked
             {
