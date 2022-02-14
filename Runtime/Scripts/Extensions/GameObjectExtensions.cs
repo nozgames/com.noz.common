@@ -10,7 +10,7 @@ namespace NoZ
         /// <typeparam name="TComponent">Component type to get or add</typeparam>
         /// <param name="gameObject">GameObject to get component from or add component to</param>
         /// <returns>The requested component</returns>
-        public static TComponent GetOrAddComponent<TComponent> (this GameObject gameObject) where TComponent : MonoBehaviour
+        public static TComponent GetOrAddComponent<TComponent> (this GameObject gameObject) where TComponent : Component
         {
             if(!gameObject.TryGetComponent<TComponent>(out var r))
                 r = gameObject.gameObject.AddComponent<TComponent>();
