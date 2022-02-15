@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
+using static UnityEngine.UIElements.VisualElement;
 
 namespace NoZ
 {
@@ -14,6 +15,19 @@ namespace NoZ
                 element.name = name;
 
             if(className != null)
+                element.AddToClassList(className);
+
+            parent.Add(element);
+            return element;
+        }
+
+        public static TElement Add<TElement>(this Hierarchy parent, string name = null, string className = null) where TElement : VisualElement, new()
+        {
+            var element = new TElement();
+            if (name != null)
+                element.name = name;
+
+            if (className != null)
                 element.AddToClassList(className);
 
             parent.Add(element);
